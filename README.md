@@ -22,15 +22,17 @@ Installation & Setup
 
 Local Development
 
-Clone the Repository:
-bashgit clone https://github.com/yourusername/Peptide3D-Mapper.git
+Clone the Repository
+
 cd Peptide3D-Mapper
 
 Install Dependencies:
-bashpip install -r requirements.txt
+
+bash - pip install -r requirements.txt
 
 Run Locally:
-bashvoila peptide_analysis.ipynb --port=8866
+bash - voila peptide_analysis.ipynb --port=8866
+
 Open your browser at http://localhost:8866.
 
 Cloud Deployment (Binder)
