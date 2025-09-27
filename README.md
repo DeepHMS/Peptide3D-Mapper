@@ -86,11 +86,17 @@ If the 3D structure fails to load (e.g., AlphaFold fetch error), a fallback test
 Large FASTA files (e.g., 29.3 MB) may slow Binder builds; consider using a subset.
 
 Project Structure
+
 textPeptide3D-Mapper/
+
 ├── peptide_analysis.ipynb  # Main notebook with Voilà app
+
 ├── requirements.txt        # Python dependencies
+
 ├── runtime.txt             # Python version
+
 ├── launch_app.py           # Script to open Binder link
+
 └── README.md               # This file
 
 Contributing
