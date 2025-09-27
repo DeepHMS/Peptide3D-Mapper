@@ -1,4 +1,5 @@
 Peptide3D Mapper is a simple, robust web-based tool designed to map peptide data from proteomics experiments to 3D protein structures, enabling visualization of peptide intensity profiles for deeper insights into protein behavior. Built with Jupyter notebooks and deployed using Voilà, it integrates CSV and FASTA inputs with AlphaFold-derived PDB files, offering interactive features like scaling (log/z-score), overlap strategies, and customizable 2D/3D views. Ideal for bioinformaticians and structural biologists, it provides downloadable outputs (PDB, PML, CSV, JPEG) and is hosted on GitHub with Binder for easy access.
+
 Features
 
 Peptide Mapping: Maps peptide sequences from a CSV file to protein structures using a FASTA reference.
