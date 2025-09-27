@@ -1,0 +1,7 @@
+py3dmol
+biopython
+requests
+ipywidgets
+matplotlib
+pandas
+scipy
