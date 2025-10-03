@@ -91,11 +91,17 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     st.components.v1.html(view._make_html(), height=420)
     # No individual colorbar here - shared one later
 
-def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    fig_width = max(12, min(40, seq_len * 0.12))  # Increased base and scaling factor
-    fig_height = max(3, min(8, seq_len * 0.005))  # Increased base and scaling factor
+import matplotlib.pyplot as plt
+import io
+import streamlit as st
+from matplotlib import colormaps
+import matplotlib.patches as patches
 
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=150)
+def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
+    fig_width = max(20, seq_len * 0.15)  # Larger base and scaling factor
+    fig_height = 5  # Fixed height for consistency
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=200)
     cmap = colormaps['autumn']
 
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1,
@@ -117,7 +123,32 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_xticks(range(0, seq_len + 1, step))
 
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
+
+    # Convert plot to image and display with st.image
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
+    buf.seek(0)
+    st.image(buf, use_column_width=True)
+    plt.close()
+
+# Example usage (replace with your data)
+residue_vals = [None] * 920  # Example sequence length
+residue_vals[184] = 1.0
+residue_vals[210] = 0.8
+residue_vals[276] = 0.6
+residue_vals[344] = 0.7
+residue_vals[414] = 0.5
+residue_vals[460] = 0.4
+residue_vals[506] = 0.3
+residue_vals[552] = 0.2
+residue_vals[618] = 0.1
+residue_vals[690] = 0.0
+residue_vals[736] = 0.9
+residue_vals[792] = 0.8
+residue_vals[828] = 0.7
+residue_vals[874] = 0.6
+
+render_linear_plot(residue_vals, "Example", 920, 0, 1)
 
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
