@@ -79,7 +79,7 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
 def render_viewer(pdb_str, residue_vals, bg_color, title):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
     # Responsive 3D sizing: Use percentage width relative to viewport (45% of container/column)
-    view = py3Dmol.view(width="95vw", height="500px")  # vw = viewport width, auto-scales with screen/column
+    view = py3Dmol.view(width="95vw", height="800px")  # vw = viewport width, auto-scales with screen/column
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
     view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
@@ -92,10 +92,16 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    # Default size (let Streamlit stretch)
-    fig, ax = plt.subplots()
+    # --- Dynamic figure size ---
+    # Scale width with sequence length (0.08 inch per residue)
+    # Clamp between 8 and 30 inches for readability
+    fig_width = max(8, min(30, seq_len * 0.08))
+    fig_height = 1.5  # keep slim strip
 
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     cmap = colormaps['autumn']
+
+    # Background strip
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1,
                                    facecolor='lightgray', edgecolor='none'))
 
@@ -112,13 +118,14 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_yticks([])
     ax.set_xlabel(f"Amino Acid Position ({title})")
 
-    # Adaptive xticks (avoid clutter on long sequences)
+    # Adaptive xticks (max ~20 labels)
     max_ticks = 20
     step = max(1, seq_len // max_ticks)
     ax.set_xticks(range(0, seq_len + 1, step))
 
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)  # Streamlit controls scaling
+    st.pyplot(fig, use_container_width=True)  # Streamlit will stretch to fit container
+
 
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
