@@ -97,6 +97,12 @@ import streamlit as st
 from matplotlib import colormaps
 import matplotlib.patches as patches
 
+import matplotlib.pyplot as plt
+import io
+import streamlit as st
+from matplotlib import colormaps
+import matplotlib.patches as patches
+
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     fig_width = max(20, seq_len * 0.15)  # Larger base and scaling factor
     fig_height = 5  # Fixed height for consistency
@@ -128,7 +134,7 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
     buf.seek(0)
-    st.image(buf, use_column_width=True)
+    st.image(buf, use_container_width=True)  # Updated parameter
     plt.close()
 
 # Example usage (replace with your data)
