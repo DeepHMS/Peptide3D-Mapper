@@ -73,8 +73,8 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
             hex_colors.append(rgb2hex(rgb))
     return hex_colors, vmin, vmax
 
-def render_viewer(pdb_str, residue_vals, bg_color, title, vmin, vmax):
-    hex_colors, _, _ = generate_colormap(residue_vals)
+def render_viewer(pdb_str, residue_vals, bg_color, title):
+    hex_colors, vmin, vmax = generate_colormap(residue_vals)
     view = py3Dmol.view(width=400, height=400)
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
@@ -85,15 +85,7 @@ def render_viewer(pdb_str, residue_vals, bg_color, title, vmin, vmax):
 
     st.markdown(f"#### {title}")
     st.components.v1.html(view._make_html(), height=420)
-
-    # Show colorbar
-    fig, ax = plt.subplots(figsize=(4, 0.5))
-    norm = Normalize(vmin=vmin, vmax=vmax)
-    sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
-    cbar = plt.colorbar(sm, cax=ax, orientation='horizontal')
-    cbar.set_label(f'{title} Z-score')
-    plt.close(fig)
-    st.pyplot(fig)
+    # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     fig, ax = plt.subplots(figsize=(20, 1))
@@ -294,34 +286,30 @@ if csv_file and fasta_file:
 
             bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-            # 3D Views
+            # 3D Views (side-by-side)
             st.subheader("3D Structure Visualizations")
             col1, col2 = st.columns(2)
             with col1:
-                render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name,
-                              min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+                render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
             with col2:
-                render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name,
-                              min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+                render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
 
-            # Linear Plots
+            # Linear Plots (stacked vertically - up and down)
             st.subheader("Linear Sequence Visualizations")
-            col1, col2 = st.columns(2)
-            with col1:
-                render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
-                                   min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
-            with col2:
-                render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
-                                   min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+            render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
+                               min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+            render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
+                               min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
 
-            # Combined Colorbar
+            # One small shared colorbar (combined range, smaller size)
             overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
             overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
-            fig, ax = plt.subplots(figsize=(4, 0.5))
+            fig, ax = plt.subplots(figsize=(6, 0.3))  # Smaller height for compact legend
             norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
             sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
-            cbar = plt.colorbar(sm, cax=ax, orientation='horizontal')
-            cbar.set_label('Z-Score Intensity')
+            cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
+            cbar.set_label('Z-Score Intensity', fontsize=10)
+            cbar.ax.tick_params(labelsize=8)
             plt.close(fig)
             st.pyplot(fig)
 
