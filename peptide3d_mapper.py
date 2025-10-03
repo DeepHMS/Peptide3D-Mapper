@@ -79,7 +79,7 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
 def render_viewer(pdb_str, residue_vals, bg_color, title):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
     # Responsive 3D sizing: Use percentage width relative to viewport (45% of container/column)
-    view = py3Dmol.view(width="95vw", height="1100px")  # vw = viewport width, auto-scales with screen/column
+    view = py3Dmol.view(width="95vw", height="1400px")  # vw = viewport width, auto-scales with screen/column
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
     view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
@@ -92,39 +92,33 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    # Instead of hard figsize, use ratio + high DPI
-    fig_width = max(8, min(30, seq_len * 0.08))  # logical width
-    fig_height = 1.5  # slim strip
+    fig_width = max(8, min(30, seq_len * 0.08))
+    fig_height = max(2, min(6, seq_len * 0.003))  # scale height with sequence length
 
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=150)  # high dpi for clarity
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=150)
     cmap = colormaps['autumn']
 
-    # Background strip
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1,
                                    facecolor='lightgray', edgecolor='none'))
 
-    # Residue coloring
     for i in range(seq_len):
         if residue_vals[i] is not None:
             norm = (residue_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
             ax.add_patch(patches.Rectangle((i, 0), 1, 1,
                                            facecolor=cmap(norm)[:3], edgecolor='none'))
 
-    # Axis formatting
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
     ax.set_xlabel(f"Amino Acid Position ({title})")
 
-    # Adaptive xticks
     max_ticks = 20
     step = max(1, seq_len // max_ticks)
     ax.set_xticks(range(0, seq_len + 1, step))
 
     plt.tight_layout()
-
-    # 🚀 This makes it auto-fill the column width in Streamlit
     st.pyplot(fig, use_container_width=True)
+
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
