@@ -93,7 +93,8 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    fig_width = max(20, seq_len * 0.15)  # Larger base and scaling factor
+    # Cap the width to a reasonable maximum to control scaling
+    fig_width = min(50, max(20, seq_len * 0.15))  # Max width capped at 50 inches
     fig_height = 5  # Fixed height for consistency
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=200)
@@ -119,12 +120,33 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
 
     plt.tight_layout()
 
-    # Convert plot to image and display with st.image
+    # Convert plot to image
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
     buf.seek(0)
-    st.image(buf, use_container_width=True)  # Updated parameter
     plt.close()
+
+    # Inject HTML with JavaScript to trigger full-screen mode
+    html_content = f"""
+    <div id="plot-container" style="width: 100%; height: auto;">
+        <img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}" style="width: 100%; height: auto;">
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {{
+            var elem = document.getElementById("plot-container");
+            if (elem.requestFullscreen) {{
+                elem.requestFullscreen();
+            } else if (elem.mozRequestFullScreen) {{ /* Firefox */
+                elem.mozRequestFullScreen();
+            } else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+                elem.msRequestFullscreen();
+            }}
+        }});
+    </script>
+    """
+    st.components.v1.html(html_content, height=500)  # Adjust height as needed
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
@@ -357,3 +379,5 @@ if csv_file and fasta_file:
                     if st.button("Reset & Re-Process", use_container_width=True):
                         st.session_state.processed = False
                         st.rerun()
+
+import base64  # Added to encode the image for HTML
