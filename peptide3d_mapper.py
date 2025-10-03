@@ -12,6 +12,7 @@ from matplotlib.cm import ScalarMappable
 import zipfile
 import matplotlib.colors as mcolors  # For rgb2hex
 import matplotlib.patches as patches
+import base64  # Added to encode the image for HTML
 
 
 # Set wide layout at the top
@@ -128,19 +129,19 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
 
     # Inject HTML with JavaScript to trigger full-screen mode
     html_content = f"""
-    <div id="plot-container" style="width: 100%; height: auto;">
+    <div id="plot-container-{title}" style="width: 100%; height: auto;">
         <img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}" style="width: 100%; height: auto;">
     </div>
     <script>
         document.addEventListener("DOMContentLoaded", function() {{
-            var elem = document.getElementById("plot-container");
+            var elem = document.getElementById("plot-container-{title}");
             if (elem.requestFullscreen) {{
                 elem.requestFullscreen();
-            } else if (elem.mozRequestFullScreen) {{ /* Firefox */
+            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
                 elem.mozRequestFullScreen();
-            } else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
                 elem.webkitRequestFullscreen();
-            } else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
                 elem.msRequestFullscreen();
             }}
         }});
@@ -379,5 +380,3 @@ if csv_file and fasta_file:
                     if st.button("Reset & Re-Process", use_container_width=True):
                         st.session_state.processed = False
                         st.rerun()
-
-import base64  # Added to encode the image for HTML
