@@ -1,7 +1,7 @@
-py3dmol
-biopython
-requests
-ipywidgets
-matplotlib
+streamlit
 pandas
-scipy
+numpy
+biopython
+py3Dmol
+requests
+matplotlib
