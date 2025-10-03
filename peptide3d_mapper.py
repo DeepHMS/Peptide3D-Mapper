@@ -9,6 +9,8 @@ from matplotlib import colormaps
 from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
+import zipfile
+from matplotlib import patches
 
 def z_score(intensities):
     log_int = np.log10(intensities + 1)
@@ -36,14 +38,22 @@ def map_peptides_to_residues(df, protein_seq, intensity_col, overlap_strategy='m
             continue
         end = start + len(pep)
         for i in range(start, end):
+            z_val = z_scores[idx]
             if residue_vals[i] is None:
-                residue_vals[i] = [z_scores[idx]]
+                residue_vals[i] = [z_val]
             else:
-                residue_vals[i].append(z_scores[idx])
+                residue_vals[i].append(z_val)
 
     for i in range(seq_len):
         if residue_vals[i]:
-            residue_vals[i] = np.mean(residue_vals[i])
+            if overlap_strategy == 'merge':
+                residue_vals[i] = np.mean(residue_vals[i])
+            elif overlap_strategy == 'highest':
+                residue_vals[i] = np.max(residue_vals[i])
+            elif overlap_strategy in ['none', 'last']:
+                residue_vals[i] = residue_vals[i][-1]
+            else:
+                residue_vals[i] = np.mean(residue_vals[i])  # Default to merge
         else:
             residue_vals[i] = None
     return residue_vals
@@ -63,8 +73,8 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
             hex_colors.append(rgb2hex(rgb))
     return hex_colors, vmin, vmax
 
-def render_viewer(pdb_str, residue_vals, bg_color, title):
-    hex_colors, vmin, vmax = generate_colormap(residue_vals)
+def render_viewer(pdb_str, residue_vals, bg_color, title, vmin, vmax):
+    hex_colors, _, _ = generate_colormap(residue_vals)
     view = py3Dmol.view(width=400, height=400)
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
@@ -82,20 +92,76 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
     cbar = plt.colorbar(sm, cax=ax, orientation='horizontal')
     cbar.set_label(f'{title} Z-score')
-    plt.close(fig)  # Clean up
+    plt.close(fig)
     st.pyplot(fig)
+
+def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
+    fig, ax = plt.subplots(figsize=(20, 1))
+    cmap = colormaps['autumn']
+    ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+    for i in range(seq_len):
+        if residue_vals[i] is not None:
+            norm = (residue_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
+            ax.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+    ax.set_xlim(0, seq_len)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([])
+    ax.set_xlabel(f'Amino Acid Position ({title})')
+    ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
+    plt.tight_layout()
+    st.pyplot(fig)
+
+def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # PDB
+        zipf.writestr(f"{protein_of_interest}_protein.pdb", pdb_str)
+
+        # Peptide CSVs
+        for condition in conditions:
+            peptide_csv = peptide_data[condition].to_csv(index=False)
+            zipf.writestr(f"{protein_of_interest}_{condition}_peptides.csv", peptide_csv)
+
+        # PyMOL scripts
+        cmap = colormaps['autumn']
+        for condition in conditions:
+            pml_content = f"load {protein_of_interest}_protein.pdb\nhide everything\nshow cartoon\ncolor gray90, all\nzoom\n"
+            min_log, max_log = min_max_logs[condition]
+            for i in range(seq_len):
+                if residue_data[condition][i] is not None:
+                    norm = (residue_data[condition][i] - min_log) / (max_log - min_log) if max_log > min_log else 0.5
+                    color_hex = matplotlib.colors.rgb2hex(cmap(norm)[:3])
+                    pml_content += f"color {color_hex}, resi {i+1}\n"
+            zipf.writestr(f"{protein_of_interest}_{condition}_pymol_script.pml", pml_content)
+
+        # Linear JPEGs
+        for condition in conditions:
+            fig, ax = plt.subplots(figsize=(12, 1), dpi=600)
+            ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+            min_log, max_log = min_max_logs[condition]
+            for i in range(seq_len):
+                if residue_data[condition][i] is not None:
+                    norm = (residue_data[condition][i] - min_log) / (max_log - min_log) if max_log > min_log else 0.5
+                    ax.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+            ax.set_xlim(0, seq_len)
+            ax.set_ylim(0, 1)
+            ax.set_yticks([])
+            ax.set_xlabel(f'Amino Acid Position ({condition})')
+            ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='jpeg', dpi=600, bbox_inches='tight')
+            img_buffer.seek(0)
+            zipf.writestr(f"{protein_of_interest}_{condition}_linear.jpeg", img_buffer.read())
+            plt.close(fig)
+
+    zip_buffer.seek(0)
+    return zip_buffer
 
 # ------------------------
 # Streamlit App
 # ------------------------
 
-# Header with icon and title
-col1, col2 = st.columns([1, 4])
-with col1:
-    # st.image("icon.png", width=50)  # Uncomment if icon.png is in the same folder
-    st.empty()  # Placeholder for icon space (keeps layout balanced)
-with col2:
-    st.title("Peptide3D Mapper")
+st.title("Peptide3D Mapper")
 
 st.markdown(
     """
@@ -119,64 +185,126 @@ if csv_file and fasta_file:
 
     fasta_str = fasta_file.getvalue().decode("utf-8")
     fasta_handle = io.StringIO(fasta_str)
-    fasta_records = list(SeqIO.parse(fasta_handle, "fasta"))
+    seq_records = list(SeqIO.parse(fasta_handle, "fasta"))
+    if not seq_records:
+        st.error("No sequences found in FASTA file.")
+        st.stop()
 
     intensity_cols = [c for c in df.columns if 'intensity' in c.lower()]
-    if not intensity_cols:
-        st.error("No intensity columns found in CSV.")
+    if len(intensity_cols) != 2:
+        st.error(f"Expected exactly 2 intensity columns, found: {intensity_cols}")
         st.stop()
-    
-    condition1_col = st.selectbox("Select Condition 1 Column", intensity_cols)
-    condition2_col = st.selectbox("Select Condition 2 Column", [c for c in intensity_cols if c != condition1_col])
 
-    protein_options = sorted(df['Protein.Group'].unique())
-    selected_protein = st.selectbox("Select Protein", protein_options)
+    col1, col2 = st.columns(2)
+    with col1:
+        condition1_name = st.text_input("Name for Condition 1", value="Condition 1")
+        condition1_col = st.selectbox("Map Condition 1 to Column", intensity_cols, index=0)
+    with col2:
+        condition2_name = st.text_input("Name for Condition 2", value="Condition 2")
+        condition2_col = st.selectbox("Map Condition 2 to Column", intensity_cols, index=1)
 
-    bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
-
-    protein_seq = None
-    base_id = selected_protein.split('-')[0]
-    for rec in fasta_records:
-        parts = rec.id.split('|')
-        if len(parts) > 1 and parts[1] == base_id:
-            protein_seq = str(rec.seq)
-            break
-
-    if protein_seq is None:
-        st.error("Protein sequence not found in FASTA. Ensure IDs match (e.g., UniProt prefix).")
+    if condition1_col == condition2_col:
+        st.error("Intensity columns must be different.")
         st.stop()
-    else:
-        df_protein = df[df['Protein.Group'].str.contains(selected_protein, na=False)]
-        if df_protein.empty:
-            st.error("No peptides found for selected protein.")
-            st.stop()
 
-        residues_condition1 = map_peptides_to_residues(df_protein, protein_seq, condition1_col)
-        residues_condition2 = map_peptides_to_residues(df_protein, protein_seq, condition2_col)
+    if st.button("Confirm Conditions"):
+        protein_options = sorted(df['Protein.Group'].unique())
+        selected_protein = st.selectbox("Select Protein", protein_options)
 
-        pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
-        with st.spinner("Fetching AlphaFold structure..."):
-            try:
+        combine_isoforms = st.selectbox("Combine Isoforms?", ["yes", "no"])
+        overlap_strategy = st.selectbox("Overlap Strategy", ["none", "merge", "highest", "last"])
+
+        if st.button("Process Protein"):
+            # Find sequence
+            base_id = selected_protein.split('-')[0]
+            protein_seq = None
+            for rec in seq_records:
+                parts = rec.id.split('|')
+                if len(parts) > 1 and parts[1] == base_id:
+                    protein_seq = str(rec.seq)
+                    break
+            if protein_seq is None:
+                st.error("Protein sequence not found in FASTA. Ensure IDs match (e.g., UniProt prefix).")
+                st.stop()
+
+            seq_len = len(protein_seq)
+
+            # Find isoforms
+            isoforms = df[df['Protein.Group'].str.contains(selected_protein + r'(?:-\d+)?$', regex=True)]['Protein.Group'].unique()
+            if len(isoforms) > 1 and combine_isoforms == "no":
+                selected_groups = st.multiselect("Select Isoforms", options=list(isoforms), default=list(isoforms))
+            else:
+                selected_groups = list(isoforms)
+
+            if not selected_groups:
+                st.error("No isoforms selected.")
+                st.stop()
+
+            selected_df = df[df['Protein.Group'].isin(selected_groups)]
+
+            conditions = {condition1_name: condition1_col, condition2_name: condition2_col}
+            peptide_data = {}
+            residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
+            min_max_logs = {}
+
+            for condition, intensity_col in conditions.items():
+                residues = map_peptides_to_residues(selected_df, protein_seq, intensity_col, overlap_strategy)
+                residue_data[condition] = residues
+                covered = [v for v in residues if v is not None]
+                if not covered:
+                    st.error(f"No peptides mapped for {condition}.")
+                    st.stop()
+                min_max_logs[condition] = (min(covered), max(covered))
+                peptides = selected_df.groupby('Stripped.Sequence')[intensity_col].mean().reset_index()
+                peptide_data[condition] = peptides
+
+            # Fetch PDB
+            pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
+            with st.spinner("Fetching AlphaFold structure..."):
                 r = requests.get(pdb_url, timeout=10)
                 if r.status_code == 200:
                     pdb_str = r.text
                 else:
-                    raise ValueError(f"PDB fetch failed: {r.status_code}")
-            except Exception as e:
-                st.error(f"Failed to fetch PDB: {e}. Try a valid UniProt ID or upload a local PDB.")
-                st.stop()
+                    st.error(f"PDB fetch failed: {r.status_code}")
+                    st.stop()
 
-        # Render if data available
-        condition1_vals = [v for v in residues_condition1 if v is not None]
-        condition2_vals = [v for v in residues_condition2 if v is not None]
+            bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-        if not condition1_vals:
-            st.error("No mapped peptides for Condition 1.")
-        elif not condition2_vals:
-            st.error("No mapped peptides for Condition 2.")
-        else:
+            # 3D Views
             col1, col2 = st.columns(2)
             with col1:
-                render_viewer(pdb_str, residues_condition1, bg_color, "Condition 1")
+                render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name,
+                              min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
             with col2:
-                render_viewer(pdb_str, residues_condition2, bg_color, "Condition 2")
+                render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name,
+                              min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+
+            # Linear Plots
+            col1, col2 = st.columns(2)
+            with col1:
+                render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
+                                   min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+            with col2:
+                render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
+                                   min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+
+            # Combined Colorbar
+            overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
+            overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
+            fig, ax = plt.subplots(figsize=(4, 0.5))
+            norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
+            sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
+            cbar = plt.colorbar(sm, cax=ax, orientation='horizontal')
+            cbar.set_label('Z-Score Intensity')
+            plt.close(fig)
+            st.pyplot(fig)
+
+            # Download
+            if st.button("Download Files (ZIP)"):
+                zip_buffer = create_download_zip(selected_protein, pdb_str, peptide_data, residue_data, conditions.keys(), min_max_logs, seq_len)
+                st.download_button(
+                    label="Download ZIP",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"{selected_protein}_files.zip",
+                    mime="application/zip"
+                )
