@@ -357,21 +357,3 @@ if csv_file and fasta_file:
                     if st.button("Reset & Re-Process", use_container_width=True):
                         st.session_state.processed = False
                         st.rerun()
-
-if __name__ == "__main__":
-    residue_vals = [None] * 920
-    residue_vals[184] = 1.0
-    residue_vals[210] = 0.8
-    residue_vals[276] = 0.6
-    residue_vals[344] = 0.7
-    residue_vals[414] = 0.5
-    residue_vals[460] = 0.4
-    residue_vals[506] = 0.3
-    residue_vals[552] = 0.2
-    residue_vals[618] = 0.1
-    residue_vals[690] = 0.0
-    residue_vals[736] = 0.9
-    residue_vals[792] = 0.8
-    residue_vals[828] = 0.7
-    residue_vals[874] = 0.6
-    render_linear_plot(residue_vals, "Example", 920, 0, 1)
