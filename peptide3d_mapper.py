@@ -90,7 +90,7 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     view.zoomTo()
 
     st.markdown(f"#### {title}")
-    st.components.v1.html(view._make_html(), height=420)
+    st.components.v1.html(view._make_html(), height=600)
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
