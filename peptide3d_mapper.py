@@ -77,20 +77,21 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
     return hex_colors, vmin, vmax
 
 def render_viewer(pdb_str, residue_vals, bg_color, title):
-    hex_colors, vmin, vmax = generate_colormap(residue_vals)
-    # Dynamic width: ~45% of screen (responsive)
-    viewer_width = int(st.container().get_index() * 0.45 * 1000)  # Approx pixels; adjust as needed
-    view = py3Dmol.view(width=viewer_width, height=400)
-    view.addModel(pdb_str, 'pdb')
-    view.setBackgroundColor(bg_color)
-    view.setStyle({}, {'cartoon': {'style': 'trace', 'width': 2, 'color': 'lightgray'}})  # Bolder trace for better fill
-    for i, c in enumerate(hex_colors):
-        view.setStyle({'resi': str(i + 1)}, {'cartoon': {'style': 'trace', 'width': 2, 'color': c}})
-    view.zoomTo({padding: 0.02})  # Tighter zoom, less empty space
-    view.fit()  # Auto-fit to model bounds
-
-    st.markdown(f"#### {title}")
-    st.components.v1.html(view._make_html(), height=420)
+    try:
+        hex_colors, vmin, vmax = generate_colormap(residue_vals)
+        # Fixed responsive width: Fills column without overflow
+        view = py3Dmol.view(width=800, height=400)
+        view.addModel(pdb_str, 'pdb')
+        view.setBackgroundColor(bg_color)
+        view.setStyle({}, {'cartoon': {'style': 'trace', 'width': 2, 'color': 'lightgray'}})  # Bolder trace for better fill
+        for i, c in enumerate(hex_colors):
+            view.setStyle({'resi': str(i + 1)}, {'cartoon': {'style': 'trace', 'width': 2, 'color': c}})
+        view.zoomTo(padding=0.02)  # Tighter zoom, less empty space
+        view.fit()  # Auto-fit to model bounds
+        st.markdown(f"#### {title}")
+        st.components.v1.html(view._make_html(), height=420)
+    except Exception as e:
+        st.error(f"Viewer render error: {e}. Check PDB validity.")
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     # Taller figsize for visibility (responsive to wide layout)
