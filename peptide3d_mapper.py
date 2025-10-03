@@ -78,10 +78,10 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
             hex_colors.append(mcolors.rgb2hex(rgb))
     return hex_colors, vmin, vmax
 
-def render_viewer(pdb_str, residue_vals, bg_color, title):
+def render_viewer(pdb_str, residue_vals, bg_color, title, viewer_id):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
     # Responsive 3D sizing: Use percentage width relative to viewport (45% of container/column)
-    view = py3Dmol.view(width="95vw", height="400px")  # vw = viewport width, auto-scales with screen/column
+    view = py3Dmol.view(width="95vw", height="1400px")  # vw = viewport width, auto-scales with screen/column
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
     view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
@@ -89,14 +89,15 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
         view.setStyle({'resi': str(i+1)}, {'cartoon': {'color': c}})
     view.zoomTo()
 
+    # Generate the HTML with a unique viewer ID
+    html_content = view._make_html().replace('id="3dmolviewer"', f'id="{viewer_id}"')
     st.markdown(f"#### {title}")
-    st.components.v1.html(view._make_html(), height=800)
-    # No individual colorbar here - shared one later
+    st.components.v1.html(html_content, height=420)
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     # Cap the width to a reasonable maximum to control scaling
     fig_width = min(50, max(20, seq_len * 0.15))  # Max width capped at 50 inches
-    fig_height = 3  # Fixed height for consistency
+    fig_height = 5  # Fixed height for consistency
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=200)
     cmap = colormaps['autumn']
@@ -338,20 +339,136 @@ if csv_file and fasta_file:
 
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-                # 3D Views (side-by-side, wider viewers)
+                # 3D Views (side-by-side, wider viewers) with synchronized zoom
                 st.subheader("3D Structure Visualizations")
                 col1, col2 = st.columns(2)
                 with col1:
-                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
+                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name, "viewer1")
                 with col2:
-                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
+                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name, "viewer2")
 
-                # Linear Plots (stacked vertically - up and down)
+                # Inject JavaScript to synchronize zoom
+                sync_script = """
+                <script>
+                    // Wait for both viewers to load
+                    setTimeout(function() {
+                        var viewer1 = $3Dmol.getViewer("viewer1");
+                        var viewer2 = $3Dmol.getViewer("viewer2");
+
+                        if (viewer1 && viewer2) {
+                            // Function to sync zoom
+                            function syncZoom() {
+                                var zoom1 = viewer1.getView().zoom;
+                                var zoom2 = viewer2.getView().zoom;
+                                if (zoom1 !== zoom2) {
+                                    if (this === viewer1) {
+                                        viewer2.setView({ zoom: zoom1 });
+                                    } else {
+                                        viewer1.setView({ zoom: zoom1 });
+                                    }
+                                    viewer1.render();
+                                    viewer2.render();
+                                }
+                            }
+
+                            // Add event listeners for zoom changes
+                            viewer1.addListener("zoom", syncZoom);
+                            viewer2.addListener("zoom", syncZoom);
+
+                            // Initial sync
+                            syncZoom();
+                        }
+                    }, 1000); // Delay to ensure viewers are fully loaded
+                </script>
+                """
+                st.components.v1.html(sync_script, height=0)
+
+                # Linear Plots (stacked vertically - up and down) with reduced gap
                 st.subheader("Linear Sequence Visualizations")
-                render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
-                                   min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
-                render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
-                                   min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+                html_content = """
+                <div style="display: flex; flex-direction: column; gap: 10px;"> <!-- Reduced gap with custom CSS -->
+                """
+                html_content += f"""
+                    <div id="plot-container-{condition1_name}" style="width: 100%; height: auto;">
+                        <img src="data:image/png;base64,{base64.b64encode(io.BytesIO().getvalue()).decode()}" style="width: 100%; height: auto;" onload="this.src='data:image/png;base64,{base64.b64encode(buf1.getvalue()).decode()}'">
+                    </div>
+                    <script>
+                        document.addEventListener("DOMContentLoaded", function() {{
+                            var elem = document.getElementById("plot-container-{condition1_name}");
+                            if (elem.requestFullscreen) {{
+                                elem.requestFullscreen();
+                            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
+                                elem.mozRequestFullScreen();
+                            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+                                elem.webkitRequestFullscreen();
+                            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+                                elem.msRequestFullscreen();
+                            }}
+                        }});
+                    </script>
+                """
+
+                html_content += f"""
+                    <div id="plot-container-{condition2_name}" style="width: 100%; height: auto;">
+                        <img src="data:image/png;base64,{base64.b64encode(io.BytesIO().getvalue()).decode()}" style="width: 100%; height: auto;" onload="this.src='data:image/png;base64,{base64.b64encode(buf2.getvalue()).decode()}'">
+                    </div>
+                    <script>
+                        document.addEventListener("DOMContentLoaded", function() {{
+                            var elem = document.getElementById("plot-container-{condition2_name}");
+                            if (elem.requestFullscreen) {{
+                                elem.requestFullscreen();
+                            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
+                                elem.mozRequestFullScreen();
+                            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+                                elem.webkitRequestFullscreen();
+                            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+                                elem.msRequestFullscreen();
+                            }}
+                        }});
+                    </script>
+                """
+                html_content += "</div>"
+
+                # Generate and store the plot buffers
+                buf1 = io.BytesIO()
+                fig1, ax1 = plt.subplots(figsize=(min(50, max(20, seq_len * 0.15)), 5), dpi=200)
+                cmap = colormaps['autumn']
+                ax1.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+                for i in range(seq_len):
+                    if residue_data[condition1_name][i] is not None:
+                        norm = (residue_data[condition1_name][i] - min_max_logs[condition1_name][0]) / (min_max_logs[condition1_name][1] - min_max_logs[condition1_name][0]) if min_max_logs[condition1_name][1] > min_max_logs[condition1_name][0] else 0.5
+                        ax1.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+                ax1.set_xlim(0, seq_len)
+                ax1.set_ylim(0, 1)
+                ax1.set_yticks([])
+                ax1.set_xlabel(f"Amino Acid Position ({condition1_name})")
+                max_ticks = 20
+                step = max(1, seq_len // max_ticks)
+                ax1.set_xticks(range(0, seq_len + 1, step))
+                plt.tight_layout()
+                plt.savefig(buf1, format='png', bbox_inches='tight', dpi=200)
+                buf1.seek(0)
+                plt.close(fig1)
+
+                buf2 = io.BytesIO()
+                fig2, ax2 = plt.subplots(figsize=(min(50, max(20, seq_len * 0.15)), 5), dpi=200)
+                ax2.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+                for i in range(seq_len):
+                    if residue_data[condition2_name][i] is not None:
+                        norm = (residue_data[condition2_name][i] - min_max_logs[condition2_name][0]) / (min_max_logs[condition2_name][1] - min_max_logs[condition2_name][0]) if min_max_logs[condition2_name][1] > min_max_logs[condition2_name][0] else 0.5
+                        ax2.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+                ax2.set_xlim(0, seq_len)
+                ax2.set_ylim(0, 1)
+                ax2.set_yticks([])
+                ax2.set_xlabel(f"Amino Acid Position ({condition2_name})")
+                ax2.set_xticks(range(0, seq_len + 1, step))
+                plt.tight_layout()
+                plt.savefig(buf2, format='png', bbox_inches='tight', dpi=200)
+                buf2.seek(0)
+                plt.close(fig2)
+
+                # Render the combined HTML content
+                st.components.v1.html(html_content, height=1000)  # Adjust height to accommodate both plots
 
                 # One small shared colorbar (combined range, smaller size)
                 overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
