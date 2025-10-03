@@ -92,8 +92,8 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    fig_width = max(8, min(30, seq_len * 0.08))
-    fig_height = max(2, min(6, seq_len * 0.003))  # scale height with sequence length
+    fig_width = max(12, min(40, seq_len * 0.12))  # Increased base and scaling factor
+    fig_height = max(3, min(8, seq_len * 0.005))  # Increased base and scaling factor
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=150)
     cmap = colormaps['autumn']
