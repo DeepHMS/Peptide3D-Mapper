@@ -346,39 +346,39 @@ if csv_file and fasta_file:
                     render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name, "viewer1")
                 with col2:
                     render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name, "viewer2")
-
-                # Inject JavaScript to synchronize zoom
+                
+                # Inject JavaScript to synchronize zoom with improved timing
                 sync_script = """
                 <script>
-                    // Wait for both viewers to load
-                    setTimeout(function() {
+                    function syncZoom() {
                         var viewer1 = $3Dmol.getViewer("viewer1");
                         var viewer2 = $3Dmol.getViewer("viewer2");
-
                         if (viewer1 && viewer2) {
-                            // Function to sync zoom
-                            function syncZoom() {
-                                var zoom1 = viewer1.getView().zoom;
-                                var zoom2 = viewer2.getView().zoom;
-                                if (zoom1 !== zoom2) {
-                                    if (this === viewer1) {
-                                        viewer2.setView({ zoom: zoom1 });
-                                    } else {
-                                        viewer1.setView({ zoom: zoom1 });
-                                    }
-                                    viewer1.render();
-                                    viewer2.render();
+                            var zoom1 = viewer1.getView().zoom;
+                            var zoom2 = viewer2.getView().zoom;
+                            if (zoom1 !== zoom2) {
+                                if (this === viewer1) {
+                                    viewer2.setView({ zoom: zoom1 });
+                                } else {
+                                    viewer1.setView({ zoom: zoom1 });
                                 }
+                                viewer1.render();
+                                viewer2.render();
                             }
-
-                            // Add event listeners for zoom changes
+                        }
+                    }
+                
+                    // Check for viewers and set up synchronization after a short delay
+                    var checkViewers = setInterval(function() {
+                        var viewer1 = $3Dmol.getViewer("viewer1");
+                        var viewer2 = $3Dmol.getViewer("viewer2");
+                        if (viewer1 && viewer2) {
+                            clearInterval(checkViewers);
                             viewer1.addListener("zoom", syncZoom);
                             viewer2.addListener("zoom", syncZoom);
-
-                            // Initial sync
-                            syncZoom();
+                            syncZoom(); // Initial sync
                         }
-                    }, 1000); // Delay to ensure viewers are fully loaded
+                    }, 500); // Check every 500ms
                 </script>
                 """
                 st.components.v1.html(sync_script, height=0)
