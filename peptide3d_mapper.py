@@ -79,24 +79,24 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
 def render_viewer(pdb_str, residue_vals, bg_color, title):
     try:
         hex_colors, vmin, vmax = generate_colormap(residue_vals)
-        # Fixed responsive width: Fills column without overflow
         view = py3Dmol.view(width=800, height=400)
         view.addModel(pdb_str, 'pdb')
         view.setBackgroundColor(bg_color)
-        view.setStyle({}, {'cartoon': {'style': 'trace', 'width': 2, 'color': 'lightgray'}})  # Bolder trace for better fill
+        view.setStyle({}, {'cartoon': {'style': 'trace', 'width': 2, 'color': 'lightgray'}})
         for i, c in enumerate(hex_colors):
             view.setStyle({'resi': str(i + 1)}, {'cartoon': {'style': 'trace', 'width': 2, 'color': c}})
-        view.zoomTo(padding=0.02)  # Tighter zoom, less empty space
-        view.fit()  # Auto-fit to model bounds
+        view.zoomTo(padding=0.02)
+        view.fit()
         st.markdown(f"#### {title}")
         st.components.v1.html(view._make_html(), height=420)
     except Exception as e:
-        st.warning(f"3D Viewer failed for {title}: {str(e)[:100]}... (Check PDB or browser JS). Falling back to preview.")
-        st.info(f"PDB preview for {title}: Model loaded ({len(pdb_str)} chars), but rendering error.")
+        st.warning(f"3D Viewer failed for {title}: {str(e)[:100]}...")
+        # Fallback: Show sample colored residues
+        colored_res = [i+1 for i, val in enumerate(residue_vals[:10]) if val is not None]
+        st.info(f"Sample colored residues (first 10): {colored_res}")
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    # Taller figsize for visibility (responsive to wide layout)
-    fig, ax = plt.subplots(figsize=(25, 3))  # Increased height
+    fig, ax = plt.subplots(figsize=(25, 1.5))  # Rollback to visible height (was 3, now 1.5)
     cmap = colormaps['autumn']
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
     covered_count = 0
@@ -105,19 +105,19 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
             covered_count += 1
             norm = (residue_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
             ax.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
-    # Overlay coverage text
     coverage_pct = (covered_count / seq_len * 100) if seq_len > 0 else 0
     ax.text(0.02, 0.5, f'{coverage_pct:.1f}% covered', transform=ax.transAxes, va='center', fontsize=10, color='black')
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
     ax.set_xlabel(f'Amino Acid Position ({title})', fontsize=12)
-    # Dynamic xticks: Limit to 10-20 for long seq_len
     tick_step = max(1, seq_len // 15)
     ax.set_xticks(range(0, seq_len + 1, tick_step))
-    plt.subplots_adjust(bottom=0.2)  # Extra bottom space for labels
+    plt.subplots_adjust(bottom=0.2)
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)  # Full-width for visibility
+    plt.show()  # Force show
+    st.pyplot(fig, use_container_width=True)  # Full-width
+    plt.close(fig)  # Memory cleanup
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
@@ -142,9 +142,9 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
                     pml_content += f"color {color_hex}, resi {i+1}\n"
             zipf.writestr(f"{protein_of_interest}_{condition}_pymol_script.pml", pml_content)
 
-        # Linear JPEGs
+        # Linear JPEGs (fixed cmap bug)
         for condition in conditions:
-            fig, ax = plt.subplots(figsize=(25, 3), dpi=300)  # Taller for download too
+            fig, ax = plt.subplots(figsize=(25, 1.5), dpi=300)
             ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
             min_log, max_log = min_max_logs[condition]
             covered_count = 0
@@ -163,7 +163,7 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
             ax.set_xticks(range(0, seq_len + 1, tick_step))
             plt.subplots_adjust(bottom=0.2)
             img_buffer = io.BytesIO()
-            plt.savefig(img_buffer, format='jpeg', dpi=300, bbox_inches='tight')  # Lower DPI for file size
+            plt.savefig(img_buffer, format='jpeg', dpi=300, bbox_inches='tight')
             img_buffer.seek(0)
             zipf.writestr(f"{protein_of_interest}_{condition}_linear.jpeg", img_buffer.read())
             plt.close(fig)
@@ -216,7 +216,7 @@ if csv_file and fasta_file:
         st.stop()
 
     # Step 1: Conditions (wide columns for balance)
-    col1, col2 = st.columns([1, 1])  # Even split for wide layout
+    col1, col2 = st.columns([1, 1])
     with col1:
         condition1_name = st.text_input("Name for Condition 1", value="Condition 1")
         condition1_col = st.selectbox("Map Condition 1 to Column", intensity_cols, index=0)
@@ -231,10 +231,10 @@ if csv_file and fasta_file:
     # Confirm Conditions Button (full width)
     if st.button("Confirm Conditions", use_container_width=True):
         st.session_state.conditions_confirmed = True
-        st.session_state.processed = False  # Reset processing
-        st.rerun()  # Refresh to show Step 2
+        st.session_state.processed = False
+        st.rerun()
 
-    # Step 2: Protein/Options (in a container for better spacing)
+    # Step 2: Protein/Options
     if st.session_state.conditions_confirmed:
         with st.container(border=True):
             st.info("✅ Conditions confirmed. Now select protein and options.")
@@ -248,12 +248,11 @@ if csv_file and fasta_file:
             with col4:
                 overlap_strategy = st.selectbox("Overlap Strategy", ["none", "merge", "highest", "last"])
 
-            # Process Protein Button (full width)
             if st.button("Process Protein", use_container_width=True):
                 st.session_state.processed = True
-                st.rerun()  # Refresh to trigger Step 3 (processing/rendering)
+                st.rerun()
 
-        # Step 3: Processing & Rendering (triggered by processed=True)
+        # Step 3: Processing & Rendering
         if st.session_state.processed:
             with st.container(border=True):
                 st.success("✅ Processing complete! Visualizations below.")
@@ -289,7 +288,7 @@ if csv_file and fasta_file:
                 peptide_data = {}
                 residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
                 min_max_logs = {}
-                coverage_data = {}  # For debug
+                coverage_data = {}
 
                 for condition, intensity_col in conditions.items():
                     residues = map_peptides_to_residues(selected_df, protein_seq, intensity_col, overlap_strategy)
@@ -317,8 +316,8 @@ if csv_file and fasta_file:
 
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-                # Debug Expander (shows coverage, etc.)
-                with st.expander("Debug: Data Coverage & Checks", expanded=False):
+                # Debug Expander (expanded by default for troubleshooting)
+                with st.expander("Debug: Data Coverage & Sample (Click to check why gray)", expanded=True):
                     st.metric("Sequence Length", seq_len)
                     col_d1, col_d2 = st.columns(2)
                     with col_d1:
@@ -327,30 +326,33 @@ if csv_file and fasta_file:
                         st.metric(f"{condition2_name} Coverage", f"{coverage_data[condition2_name]:.1f}%")
                     st.write(f"Peptides in {condition1_name}: {len(peptide_data[condition1_name])}")
                     st.write(f"Peptides in {condition2_name}: {len(peptide_data[condition2_name])}")
+                    # Sample residue_vals
+                    st.write("**Sample Residue Vals (first 10, {condition1_name}):**", residue_data[condition1_name][:10])
+                    st.write("**Sample Residue Vals (first 10, {condition2_name}):**", residue_data[condition2_name][:10])
 
-                # 3D Views (side-by-side, responsive columns)
+                # 3D Views
                 st.subheader("3D Structure Visualizations")
-                col1, col2 = st.columns([1, 1])  # Equal split
+                col1, col2 = st.columns([1, 1])
                 with col1:
-                    with st.container(border=True):  # Frame for better visibility
+                    with st.container(border=True):
                         render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
                 with col2:
                     with st.container(border=True):
                         render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
 
-                # Linear Plots (full-width, stacked vertically for visibility)
+                # Linear Plots
                 st.subheader("Linear Sequence Visualizations")
                 with st.container(border=True):
                     render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
                                        min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
-                    st.markdown("---")  # Thin separator
+                    st.markdown("---")
                     render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
                                        min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
 
-                # One small shared colorbar (combined range, smaller size)
+                # Colorbar
                 overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
                 overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
-                fig, ax = plt.subplots(figsize=(6, 0.3))  # Smaller height for compact legend
+                fig, ax = plt.subplots(figsize=(6, 0.3))
                 norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
                 sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
                 cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
@@ -359,7 +361,7 @@ if csv_file and fasta_file:
                 plt.close(fig)
                 st.pyplot(fig)
 
-                # Download (full width button)
+                # Download
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("Download Files (ZIP)", use_container_width=True):
