@@ -96,7 +96,7 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     # Cap the width to a reasonable maximum to control scaling
     fig_width = min(50, max(20, seq_len * 0.15))  # Max width capped at 50 inches
-    fig_height = 5  # Fixed height for consistency
+    fig_height = 3  # Fixed height for consistency
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=200)
     cmap = colormaps['autumn']
