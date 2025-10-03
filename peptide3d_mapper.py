@@ -81,7 +81,7 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
 def render_viewer(pdb_str, residue_vals, bg_color, title):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
     # Responsive 3D sizing: Use percentage width relative to viewport (45% of container/column)
-    view = py3Dmol.view(width="95vw", height="500px")  # vw = viewport width, auto-scales with screen/column
+    view = py3Dmol.view(width="95vw", height="400px")  # vw = viewport width, auto-scales with screen/column
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
     view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
@@ -90,7 +90,7 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     view.zoomTo()
 
     st.markdown(f"#### {title}")
-    st.components.v1.html(view._make_html(), height=600)
+    st.components.v1.html(view._make_html(), height=800)
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
