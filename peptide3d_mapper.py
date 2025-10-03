@@ -91,17 +91,23 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
         st.markdown(f"#### {title}")
         st.components.v1.html(view._make_html(), height=420)
     except Exception as e:
-        st.error(f"Viewer render error: {e}. Check PDB validity.")
+        st.warning(f"3D Viewer failed for {title}: {str(e)[:100]}... (Check PDB or browser JS). Falling back to preview.")
+        st.info(f"PDB preview for {title}: Model loaded ({len(pdb_str)} chars), but rendering error.")
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     # Taller figsize for visibility (responsive to wide layout)
     fig, ax = plt.subplots(figsize=(25, 3))  # Increased height
     cmap = colormaps['autumn']
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+    covered_count = 0
     for i in range(seq_len):
         if residue_vals[i] is not None:
+            covered_count += 1
             norm = (residue_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
             ax.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+    # Overlay coverage text
+    coverage_pct = (covered_count / seq_len * 100) if seq_len > 0 else 0
+    ax.text(0.02, 0.5, f'{coverage_pct:.1f}% covered', transform=ax.transAxes, va='center', fontsize=10, color='black')
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
@@ -111,7 +117,7 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_xticks(range(0, seq_len + 1, tick_step))
     plt.subplots_adjust(bottom=0.2)  # Extra bottom space for labels
     plt.tight_layout()
-    st.pyplot(fig)
+    st.pyplot(fig, use_container_width=True)  # Full-width for visibility
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
@@ -141,10 +147,14 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
             fig, ax = plt.subplots(figsize=(25, 3), dpi=300)  # Taller for download too
             ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
             min_log, max_log = min_max_logs[condition]
+            covered_count = 0
             for i in range(seq_len):
                 if residue_data[condition][i] is not None:
+                    covered_count += 1
                     norm = (residue_data[condition][i] - min_log) / (max_log - min_log) if max_log > min_log else 0.5
                     ax.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+            coverage_pct = (covered_count / seq_len * 100) if seq_len > 0 else 0
+            ax.text(0.02, 0.5, f'{coverage_pct:.1f}% covered', transform=ax.transAxes, va='center', fontsize=10, color='black')
             ax.set_xlim(0, seq_len)
             ax.set_ylim(0, 1)
             ax.set_yticks([])
@@ -279,13 +289,16 @@ if csv_file and fasta_file:
                 peptide_data = {}
                 residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
                 min_max_logs = {}
+                coverage_data = {}  # For debug
 
                 for condition, intensity_col in conditions.items():
                     residues = map_peptides_to_residues(selected_df, protein_seq, intensity_col, overlap_strategy)
                     residue_data[condition] = residues
                     covered = [v for v in residues if v is not None]
+                    coverage_pct = (len(covered) / seq_len * 100) if seq_len > 0 else 0
+                    coverage_data[condition] = coverage_pct
                     if not covered:
-                        st.error(f"No peptides mapped for {condition}.")
+                        st.error(f"No peptides mapped for {condition}. Check sequence match in CSV/FASTA.")
                         st.stop()
                     min_max_logs[condition] = (min(covered), max(covered))
                     peptides = selected_df.groupby('Stripped.Sequence')[intensity_col].mean().reset_index()
@@ -297,11 +310,23 @@ if csv_file and fasta_file:
                     r = requests.get(pdb_url, timeout=10)
                     if r.status_code == 200:
                         pdb_str = r.text
+                        st.info(f"PDB fetched: {len(pdb_str)} chars (valid model).")
                     else:
                         st.error(f"PDB fetch failed: {r.status_code}")
                         st.stop()
 
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
+
+                # Debug Expander (shows coverage, etc.)
+                with st.expander("Debug: Data Coverage & Checks", expanded=False):
+                    st.metric("Sequence Length", seq_len)
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        st.metric(f"{condition1_name} Coverage", f"{coverage_data[condition1_name]:.1f}%")
+                    with col_d2:
+                        st.metric(f"{condition2_name} Coverage", f"{coverage_data[condition2_name]:.1f}%")
+                    st.write(f"Peptides in {condition1_name}: {len(peptide_data[condition1_name])}")
+                    st.write(f"Peptides in {condition2_name}: {len(peptide_data[condition2_name])}")
 
                 # 3D Views (side-by-side, responsive columns)
                 st.subheader("3D Structure Visualizations")
