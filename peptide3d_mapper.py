@@ -173,6 +173,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Initialize session state for steps
+if 'conditions_confirmed' not in st.session_state:
+    st.session_state.conditions_confirmed = False
+if 'processed' not in st.session_state:
+    st.session_state.processed = False
+
 csv_file = st.file_uploader("Upload Peptide CSV", type=["csv"])
 fasta_file = st.file_uploader("Upload FASTA", type=["fasta"])
 
@@ -195,6 +201,7 @@ if csv_file and fasta_file:
         st.error(f"Expected exactly 2 intensity columns, found: {intensity_cols}")
         st.stop()
 
+    # Step 1: Conditions (always shown first)
     col1, col2 = st.columns(2)
     with col1:
         condition1_name = st.text_input("Name for Condition 1", value="Condition 1")
@@ -207,14 +214,31 @@ if csv_file and fasta_file:
         st.error("Intensity columns must be different.")
         st.stop()
 
+    # Confirm Conditions Button
     if st.button("Confirm Conditions"):
+        st.session_state.conditions_confirmed = True
+        st.session_state.processed = False  # Reset processing
+        st.rerun()  # Refresh to show Step 2
+
+    # Step 2: Protein/Options (shown only if confirmed)
+    if st.session_state.conditions_confirmed:
+        st.info("✅ Conditions confirmed. Now select protein and options.")
+        
         protein_options = sorted(df['Protein.Group'].unique())
         selected_protein = st.selectbox("Select Protein", protein_options)
 
         combine_isoforms = st.selectbox("Combine Isoforms?", ["yes", "no"])
         overlap_strategy = st.selectbox("Overlap Strategy", ["none", "merge", "highest", "last"])
 
+        # Process Protein Button
         if st.button("Process Protein"):
+            st.session_state.processed = True
+            st.rerun()  # Refresh to trigger Step 3 (processing/rendering)
+
+        # Step 3: Processing & Rendering (triggered by processed=True)
+        if st.session_state.processed:
+            st.info("🔄 Processing... (This may take a moment for PDB fetch.)")
+            
             # Find sequence
             base_id = selected_protein.split('-')[0]
             protein_seq = None
@@ -271,6 +295,7 @@ if csv_file and fasta_file:
             bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
             # 3D Views
+            st.subheader("3D Structure Visualizations")
             col1, col2 = st.columns(2)
             with col1:
                 render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name,
@@ -280,6 +305,7 @@ if csv_file and fasta_file:
                               min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
 
             # Linear Plots
+            st.subheader("Linear Sequence Visualizations")
             col1, col2 = st.columns(2)
             with col1:
                 render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
@@ -308,3 +334,8 @@ if csv_file and fasta_file:
                     file_name=f"{selected_protein}_files.zip",
                     mime="application/zip"
                 )
+
+            # Reset Button (for re-processing)
+            if st.button("Reset & Re-Process"):
+                st.session_state.processed = False
+                st.rerun()
