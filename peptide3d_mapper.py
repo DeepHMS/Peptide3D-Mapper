@@ -92,22 +92,36 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    # Responsive figsize: Base on seq_len, scales with container
-    fig_width = min(25, max(100, seq_len / 20))  # Dynamic: 10-25 based on length
-    fig, ax = plt.subplots(figsize=(fig_width, 1))
+    # --- Dynamic figure width scaling ---
+    # Scale with sequence length: 0.1 inch per residue
+    # Clamp between 8" (min) and 40" (max) for readability
+    fig_width = max(8, min(40, seq_len * 0.1))
+    fig_height = 1.5  # fixed slim height for linear plots
+    
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     cmap = colormaps['autumn']
+    
+    # Base rectangle (background)
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+    
+    # Residue coloring
     for i in range(seq_len):
         if residue_vals[i] is not None:
             norm = (residue_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
             ax.add_patch(patches.Rectangle((i, 0), 1, 1, facecolor=cmap(norm)[:3], edgecolor='none'))
+    
+    # Axis formatting
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
     ax.set_xlabel(f'Amino Acid Position ({title})')
     ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
+    
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)  # Auto-scales to full container width
+    
+    # --- Streamlit display ---
+    st.pyplot(fig, use_container_width=True)  # will stretch to fit container
+
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
