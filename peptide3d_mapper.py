@@ -128,8 +128,6 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     step = max(1, seq_len // max_ticks)
     ax.set_xticks(range(0, seq_len + 1, step))
 
-    ax.tick_params(axis='x', fontize=12)  # Adjust 12 to your preferred size
-
     plt.tight_layout()
 
     # Convert plot to image and display with st.image
