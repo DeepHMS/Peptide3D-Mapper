@@ -93,7 +93,7 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     # Responsive figsize: Base on seq_len, scales with container
-    fig_width = min(25, max(10, seq_len / 20))  # Dynamic: 10-25 based on length
+    fig_width = min(25, max(100, seq_len / 20))  # Dynamic: 10-25 based on length
     fig, ax = plt.subplots(figsize=(fig_width, 1))
     cmap = colormaps['autumn']
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
