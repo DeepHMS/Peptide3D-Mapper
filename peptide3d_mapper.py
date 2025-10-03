@@ -135,8 +135,10 @@ if csv_file and fasta_file:
     bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
     protein_seq = None
+    base_id = selected_protein.split('-')[0]
     for rec in fasta_records:
-        if rec.id.startswith(selected_protein.split('-')[0]):  # More precise: match UniProt prefix
+        parts = rec.id.split('|')
+        if len(parts) > 1 and parts[1] == base_id:
             protein_seq = str(rec.seq)
             break
 
@@ -152,7 +154,6 @@ if csv_file and fasta_file:
         residues_condition1 = map_peptides_to_residues(df_protein, protein_seq, condition1_col)
         residues_condition2 = map_peptides_to_residues(df_protein, protein_seq, condition2_col)
 
-        base_id = selected_protein.split('-')[0]
         pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
         with st.spinner("Fetching AlphaFold structure..."):
             try:
