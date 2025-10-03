@@ -11,6 +11,10 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 import zipfile
 from matplotlib import patches
+import matplotlib.colors as mcolors  # For rgb2hex
+
+# Set wide layout at the top
+st.set_page_config(layout="wide", page_title="Peptide3D Mapper")
 
 def z_score(intensities):
     log_int = np.log10(intensities + 1)
@@ -69,13 +73,12 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
         else:
             norm = (val - vmin) / (vmax - vmin) if vmax > vmin else 0.5
             rgb = cmap(norm)[:3]
-            from matplotlib.colors import rgb2hex
-            hex_colors.append(rgb2hex(rgb))
+            hex_colors.append(mcolors.rgb2hex(rgb))
     return hex_colors, vmin, vmax
 
 def render_viewer(pdb_str, residue_vals, bg_color, title):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
-    view = py3Dmol.view(width=400, height=400)
+    view = py3Dmol.view(width=600, height=400)  # Slightly wider for wide layout
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
     view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
@@ -122,7 +125,7 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
             for i in range(seq_len):
                 if residue_data[condition][i] is not None:
                     norm = (residue_data[condition][i] - min_log) / (max_log - min_log) if max_log > min_log else 0.5
-                    color_hex = matplotlib.colors.rgb2hex(cmap(norm)[:3])
+                    color_hex = mcolors.rgb2hex(cmap(norm)[:3])
                     pml_content += f"color {color_hex}, resi {i+1}\n"
             zipf.writestr(f"{protein_of_interest}_{condition}_pymol_script.pml", pml_content)
 
@@ -171,8 +174,8 @@ if 'conditions_confirmed' not in st.session_state:
 if 'processed' not in st.session_state:
     st.session_state.processed = False
 
-csv_file = st.file_uploader("Upload Peptide CSV", type=["csv"])
-fasta_file = st.file_uploader("Upload FASTA", type=["fasta"])
+csv_file = st.file_uploader("Upload Peptide CSV", type=["csv"], help="CSV with Protein.Group, Stripped.Sequence, and intensity columns")
+fasta_file = st.file_uploader("Upload FASTA", type=["fasta"], help="FASTA with matching UniProt IDs")
 
 if csv_file and fasta_file:
     try:
@@ -193,8 +196,8 @@ if csv_file and fasta_file:
         st.error(f"Expected exactly 2 intensity columns, found: {intensity_cols}")
         st.stop()
 
-    # Step 1: Conditions (always shown first)
-    col1, col2 = st.columns(2)
+    # Step 1: Conditions (wide columns for balance)
+    col1, col2 = st.columns([1, 1])  # Even split for wide layout
     with col1:
         condition1_name = st.text_input("Name for Condition 1", value="Condition 1")
         condition1_col = st.selectbox("Map Condition 1 to Column", intensity_cols, index=0)
@@ -206,124 +209,130 @@ if csv_file and fasta_file:
         st.error("Intensity columns must be different.")
         st.stop()
 
-    # Confirm Conditions Button
-    if st.button("Confirm Conditions"):
+    # Confirm Conditions Button (full width)
+    if st.button("Confirm Conditions", use_container_width=True):
         st.session_state.conditions_confirmed = True
         st.session_state.processed = False  # Reset processing
         st.rerun()  # Refresh to show Step 2
 
-    # Step 2: Protein/Options (shown only if confirmed)
+    # Step 2: Protein/Options (in a container for better spacing)
     if st.session_state.conditions_confirmed:
-        st.info("✅ Conditions confirmed. Now select protein and options.")
-        
-        protein_options = sorted(df['Protein.Group'].unique())
-        selected_protein = st.selectbox("Select Protein", protein_options)
+        with st.container():
+            st.info("✅ Conditions confirmed. Now select protein and options.")
+            
+            protein_options = sorted(df['Protein.Group'].unique())
+            selected_protein = st.selectbox("Select Protein", protein_options)
 
-        combine_isoforms = st.selectbox("Combine Isoforms?", ["yes", "no"])
-        overlap_strategy = st.selectbox("Overlap Strategy", ["none", "merge", "highest", "last"])
+            col3, col4 = st.columns([1, 1])
+            with col3:
+                combine_isoforms = st.selectbox("Combine Isoforms?", ["yes", "no"])
+            with col4:
+                overlap_strategy = st.selectbox("Overlap Strategy", ["none", "merge", "highest", "last"])
 
-        # Process Protein Button
-        if st.button("Process Protein"):
-            st.session_state.processed = True
-            st.rerun()  # Refresh to trigger Step 3 (processing/rendering)
+            # Process Protein Button (full width)
+            if st.button("Process Protein", use_container_width=True):
+                st.session_state.processed = True
+                st.rerun()  # Refresh to trigger Step 3 (processing/rendering)
 
         # Step 3: Processing & Rendering (triggered by processed=True)
         if st.session_state.processed:
-            st.info("🔄 Processing... (This may take a moment for PDB fetch.)")
-            
-            # Find sequence
-            base_id = selected_protein.split('-')[0]
-            protein_seq = None
-            for rec in seq_records:
-                parts = rec.id.split('|')
-                if len(parts) > 1 and parts[1] == base_id:
-                    protein_seq = str(rec.seq)
-                    break
-            if protein_seq is None:
-                st.error("Protein sequence not found in FASTA. Ensure IDs match (e.g., UniProt prefix).")
-                st.stop()
-
-            seq_len = len(protein_seq)
-
-            # Find isoforms
-            isoforms = df[df['Protein.Group'].str.contains(selected_protein + r'(?:-\d+)?$', regex=True)]['Protein.Group'].unique()
-            if len(isoforms) > 1 and combine_isoforms == "no":
-                selected_groups = st.multiselect("Select Isoforms", options=list(isoforms), default=list(isoforms))
-            else:
-                selected_groups = list(isoforms)
-
-            if not selected_groups:
-                st.error("No isoforms selected.")
-                st.stop()
-
-            selected_df = df[df['Protein.Group'].isin(selected_groups)]
-
-            conditions = {condition1_name: condition1_col, condition2_name: condition2_col}
-            peptide_data = {}
-            residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
-            min_max_logs = {}
-
-            for condition, intensity_col in conditions.items():
-                residues = map_peptides_to_residues(selected_df, protein_seq, intensity_col, overlap_strategy)
-                residue_data[condition] = residues
-                covered = [v for v in residues if v is not None]
-                if not covered:
-                    st.error(f"No peptides mapped for {condition}.")
+            with st.container():
+                st.info("🔄 Processing... (This may take a moment for PDB fetch.)")
+                
+                # Find sequence
+                base_id = selected_protein.split('-')[0]
+                protein_seq = None
+                for rec in seq_records:
+                    parts = rec.id.split('|')
+                    if len(parts) > 1 and parts[1] == base_id:
+                        protein_seq = str(rec.seq)
+                        break
+                if protein_seq is None:
+                    st.error("Protein sequence not found in FASTA. Ensure IDs match (e.g., UniProt prefix).")
                     st.stop()
-                min_max_logs[condition] = (min(covered), max(covered))
-                peptides = selected_df.groupby('Stripped.Sequence')[intensity_col].mean().reset_index()
-                peptide_data[condition] = peptides
 
-            # Fetch PDB
-            pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
-            with st.spinner("Fetching AlphaFold structure..."):
-                r = requests.get(pdb_url, timeout=10)
-                if r.status_code == 200:
-                    pdb_str = r.text
+                seq_len = len(protein_seq)
+
+                # Find isoforms
+                isoforms = df[df['Protein.Group'].str.contains(selected_protein + r'(?:-\d+)?$', regex=True)]['Protein.Group'].unique()
+                if len(isoforms) > 1 and combine_isoforms == "no":
+                    selected_groups = st.multiselect("Select Isoforms", options=list(isoforms), default=list(isoforms))
                 else:
-                    st.error(f"PDB fetch failed: {r.status_code}")
+                    selected_groups = list(isoforms)
+
+                if not selected_groups:
+                    st.error("No isoforms selected.")
                     st.stop()
 
-            bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
+                selected_df = df[df['Protein.Group'].isin(selected_groups)]
 
-            # 3D Views (side-by-side)
-            st.subheader("3D Structure Visualizations")
-            col1, col2 = st.columns(2)
-            with col1:
-                render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
-            with col2:
-                render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
+                conditions = {condition1_name: condition1_col, condition2_name: condition2_col}
+                peptide_data = {}
+                residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
+                min_max_logs = {}
 
-            # Linear Plots (stacked vertically - up and down)
-            st.subheader("Linear Sequence Visualizations")
-            render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
-                               min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
-            render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
-                               min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+                for condition, intensity_col in conditions.items():
+                    residues = map_peptides_to_residues(selected_df, protein_seq, intensity_col, overlap_strategy)
+                    residue_data[condition] = residues
+                    covered = [v for v in residues if v is not None]
+                    if not covered:
+                        st.error(f"No peptides mapped for {condition}.")
+                        st.stop()
+                    min_max_logs[condition] = (min(covered), max(covered))
+                    peptides = selected_df.groupby('Stripped.Sequence')[intensity_col].mean().reset_index()
+                    peptide_data[condition] = peptides
 
-            # One small shared colorbar (combined range, smaller size)
-            overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
-            overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
-            fig, ax = plt.subplots(figsize=(6, 0.3))  # Smaller height for compact legend
-            norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
-            sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
-            cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
-            cbar.set_label('Z-Score Intensity', fontsize=10)
-            cbar.ax.tick_params(labelsize=8)
-            plt.close(fig)
-            st.pyplot(fig)
+                # Fetch PDB
+                pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
+                with st.spinner("Fetching AlphaFold structure..."):
+                    r = requests.get(pdb_url, timeout=10)
+                    if r.status_code == 200:
+                        pdb_str = r.text
+                    else:
+                        st.error(f"PDB fetch failed: {r.status_code}")
+                        st.stop()
 
-            # Download
-            if st.button("Download Files (ZIP)"):
-                zip_buffer = create_download_zip(selected_protein, pdb_str, peptide_data, residue_data, conditions.keys(), min_max_logs, seq_len)
-                st.download_button(
-                    label="Download ZIP",
-                    data=zip_buffer.getvalue(),
-                    file_name=f"{selected_protein}_files.zip",
-                    mime="application/zip"
-                )
+                bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-            # Reset Button (for re-processing)
-            if st.button("Reset & Re-Process"):
-                st.session_state.processed = False
-                st.rerun()
+                # 3D Views (side-by-side, wider viewers)
+                st.subheader("3D Structure Visualizations")
+                col1, col2 = st.columns(2)
+                with col1:
+                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
+                with col2:
+                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
+
+                # Linear Plots (stacked vertically - up and down)
+                st.subheader("Linear Sequence Visualizations")
+                render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
+                                   min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+                render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
+                                   min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+
+                # One small shared colorbar (combined range, smaller size)
+                overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
+                overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
+                fig, ax = plt.subplots(figsize=(6, 0.3))  # Smaller height for compact legend
+                norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
+                sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
+                cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
+                cbar.set_label('Z-Score Intensity', fontsize=10)
+                cbar.ax.tick_params(labelsize=8)
+                plt.close(fig)
+                st.pyplot(fig)
+
+                # Download (full width button)
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("Download Files (ZIP)", use_container_width=True):
+                        zip_buffer = create_download_zip(selected_protein, pdb_str, peptide_data, residue_data, conditions.keys(), min_max_logs, seq_len)
+                        st.download_button(
+                            label="Download ZIP",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"{selected_protein}_files.zip",
+                            mime="application/zip"
+                        )
+                with col_btn2:
+                    if st.button("Reset & Re-Process", use_container_width=True):
+                        st.session_state.processed = False
+                        st.rerun()
