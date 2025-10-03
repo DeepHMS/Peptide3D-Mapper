@@ -92,8 +92,8 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    # Responsive figsize: Base on seq_len, scales with container (similar to 45vw logic via container_width)
-    fig_width = min(25, max(10, seq_len / 20))  # Dynamic: 10-25 based on length, auto-adjusts in wide layout
+    # Responsive figsize: Base on seq_len, scales with container
+    fig_width = min(25, max(10, seq_len / 20))  # Dynamic: 10-25 based on length
     fig, ax = plt.subplots(figsize=(fig_width, 1))
     cmap = colormaps['autumn']
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
@@ -107,7 +107,7 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_xlabel(f'Amino Acid Position ({title})')
     ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)  # Auto-scales to full container width (responsive like vw)
+    st.pyplot(fig, use_container_width=True)  # Auto-scales to full container width
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
@@ -259,4 +259,84 @@ if csv_file and fasta_file:
 
                 # Find isoforms
                 isoforms = df[df['Protein.Group'].str.contains(selected_protein + r'(?:-\d+)?$', regex=True)]['Protein.Group'].unique()
-                if len(isoforms) > 1 and combine_isoforms
+                if len(isoforms) > 1 and combine_isoforms == "no":
+                    selected_groups = st.multiselect("Select Isoforms", options=list(isoforms), default=list(isoforms))
+                else:
+                    selected_groups = list(isoforms)
+
+                if not selected_groups:
+                    st.error("No isoforms selected.")
+                    st.stop()
+
+                selected_df = df[df['Protein.Group'].isin(selected_groups)]
+
+                conditions = {condition1_name: condition1_col, condition2_name: condition2_col}
+                peptide_data = {}
+                residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
+                min_max_logs = {}
+
+                for condition, intensity_col in conditions.items():
+                    residues = map_peptides_to_residues(selected_df, protein_seq, intensity_col, overlap_strategy)
+                    residue_data[condition] = residues
+                    covered = [v for v in residues if v is not None]
+                    if not covered:
+                        st.error(f"No peptides mapped for {condition}.")
+                        st.stop()
+                    min_max_logs[condition] = (min(covered), max(covered))
+                    peptides = selected_df.groupby('Stripped.Sequence')[intensity_col].mean().reset_index()
+                    peptide_data[condition] = peptides
+
+                # Fetch PDB
+                pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
+                with st.spinner("Fetching AlphaFold structure..."):
+                    r = requests.get(pdb_url, timeout=10)
+                    if r.status_code == 200:
+                        pdb_str = r.text
+                    else:
+                        st.error(f"PDB fetch failed: {r.status_code}")
+                        st.stop()
+
+                bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
+
+                # 3D Views (side-by-side, wider viewers)
+                st.subheader("3D Structure Visualizations")
+                col1, col2 = st.columns(2)
+                with col1:
+                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
+                with col2:
+                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
+
+                # Linear Plots (stacked vertically - up and down)
+                st.subheader("Linear Sequence Visualizations")
+                render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
+                                   min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+                render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
+                                   min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+
+                # One small shared colorbar (combined range, smaller size)
+                overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
+                overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
+                fig, ax = plt.subplots(figsize=(6, 0.3))  # Smaller height for compact legend
+                norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
+                sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
+                cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
+                cbar.set_label('Z-Score Intensity', fontsize=10)
+                cbar.ax.tick_params(labelsize=8)
+                plt.close(fig)
+                st.pyplot(fig)
+
+                # Download (full width button)
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("Download Files (ZIP)", use_container_width=True):
+                        zip_buffer = create_download_zip(selected_protein, pdb_str, peptide_data, residue_data, conditions.keys(), min_max_logs, seq_len)
+                        st.download_button(
+                            label="Download ZIP",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"{selected_protein}_files.zip",
+                            mime="application/zip"
+                        )
+                with col_btn2:
+                    if st.button("Reset & Re-Process", use_container_width=True):
+                        st.session_state.processed = False
+                        st.rerun()
