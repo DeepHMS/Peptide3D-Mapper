@@ -78,20 +78,23 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
 
 def render_viewer(pdb_str, residue_vals, bg_color, title):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
-    view = py3Dmol.view(width=600, height=400)  # Slightly wider for wide layout
+    # Dynamic width: ~45% of screen (responsive)
+    viewer_width = int(st.container().get_index() * 0.45 * 1000)  # Approx pixels; adjust as needed
+    view = py3Dmol.view(width=viewer_width, height=400)
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
-    view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
+    view.setStyle({}, {'cartoon': {'style': 'trace', 'width': 2, 'color': 'lightgray'}})  # Bolder trace for better fill
     for i, c in enumerate(hex_colors):
-        view.setStyle({'resi': str(i+1)}, {'cartoon': {'color': c}})
-    view.zoomTo()
+        view.setStyle({'resi': str(i + 1)}, {'cartoon': {'style': 'trace', 'width': 2, 'color': c}})
+    view.zoomTo({padding: 0.02})  # Tighter zoom, less empty space
+    view.fit()  # Auto-fit to model bounds
 
     st.markdown(f"#### {title}")
     st.components.v1.html(view._make_html(), height=420)
-    # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    fig, ax = plt.subplots(figsize=(20, 1))
+    # Taller figsize for visibility (responsive to wide layout)
+    fig, ax = plt.subplots(figsize=(25, 3))  # Increased height
     cmap = colormaps['autumn']
     ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
     for i in range(seq_len):
@@ -101,8 +104,11 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
-    ax.set_xlabel(f'Amino Acid Position ({title})')
-    ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
+    ax.set_xlabel(f'Amino Acid Position ({title})', fontsize=12)
+    # Dynamic xticks: Limit to 10-20 for long seq_len
+    tick_step = max(1, seq_len // 15)
+    ax.set_xticks(range(0, seq_len + 1, tick_step))
+    plt.subplots_adjust(bottom=0.2)  # Extra bottom space for labels
     plt.tight_layout()
     st.pyplot(fig)
 
@@ -131,7 +137,7 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
 
         # Linear JPEGs
         for condition in conditions:
-            fig, ax = plt.subplots(figsize=(12, 1), dpi=600)
+            fig, ax = plt.subplots(figsize=(25, 3), dpi=300)  # Taller for download too
             ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
             min_log, max_log = min_max_logs[condition]
             for i in range(seq_len):
@@ -142,9 +148,11 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
             ax.set_ylim(0, 1)
             ax.set_yticks([])
             ax.set_xlabel(f'Amino Acid Position ({condition})')
-            ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
+            tick_step = max(1, seq_len // 15)
+            ax.set_xticks(range(0, seq_len + 1, tick_step))
+            plt.subplots_adjust(bottom=0.2)
             img_buffer = io.BytesIO()
-            plt.savefig(img_buffer, format='jpeg', dpi=600, bbox_inches='tight')
+            plt.savefig(img_buffer, format='jpeg', dpi=300, bbox_inches='tight')  # Lower DPI for file size
             img_buffer.seek(0)
             zipf.writestr(f"{protein_of_interest}_{condition}_linear.jpeg", img_buffer.read())
             plt.close(fig)
@@ -217,7 +225,7 @@ if csv_file and fasta_file:
 
     # Step 2: Protein/Options (in a container for better spacing)
     if st.session_state.conditions_confirmed:
-        with st.container():
+        with st.container(border=True):
             st.info("✅ Conditions confirmed. Now select protein and options.")
             
             protein_options = sorted(df['Protein.Group'].unique())
@@ -236,8 +244,8 @@ if csv_file and fasta_file:
 
         # Step 3: Processing & Rendering (triggered by processed=True)
         if st.session_state.processed:
-            with st.container():
-                st.info("🔄 Processing... (This may take a moment for PDB fetch.)")
+            with st.container(border=True):
+                st.success("✅ Processing complete! Visualizations below.")
                 
                 # Find sequence
                 base_id = selected_protein.split('-')[0]
@@ -294,20 +302,24 @@ if csv_file and fasta_file:
 
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-                # 3D Views (side-by-side, wider viewers)
+                # 3D Views (side-by-side, responsive columns)
                 st.subheader("3D Structure Visualizations")
-                col1, col2 = st.columns(2)
+                col1, col2 = st.columns([1, 1])  # Equal split
                 with col1:
-                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
+                    with st.container(border=True):  # Frame for better visibility
+                        render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
                 with col2:
-                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
+                    with st.container(border=True):
+                        render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
 
-                # Linear Plots (stacked vertically - up and down)
+                # Linear Plots (full-width, stacked vertically for visibility)
                 st.subheader("Linear Sequence Visualizations")
-                render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
-                                   min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
-                render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
-                                   min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+                with st.container(border=True):
+                    render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
+                                       min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+                    st.markdown("---")  # Thin separator
+                    render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
+                                       min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
 
                 # One small shared colorbar (combined range, smaller size)
                 overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
