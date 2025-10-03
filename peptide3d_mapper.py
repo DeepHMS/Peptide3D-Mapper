@@ -10,8 +10,9 @@ from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 import zipfile
-from matplotlib import patches
 import matplotlib.colors as mcolors  # For rgb2hex
+import matplotlib.patches as patches
+
 
 # Set wide layout at the top
 st.set_page_config(layout="wide", page_title="Peptide3D Mapper")
@@ -91,18 +92,6 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     st.components.v1.html(view._make_html(), height=420)
     # No individual colorbar here - shared one later
 
-import matplotlib.pyplot as plt
-import io
-import streamlit as st
-from matplotlib import colormaps
-import matplotlib.patches as patches
-
-import matplotlib.pyplot as plt
-import io
-import streamlit as st
-from matplotlib import colormaps
-import matplotlib.patches as patches
-
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     fig_width = max(20, seq_len * 0.15)  # Larger base and scaling factor
     fig_height = 5  # Fixed height for consistency
@@ -132,7 +121,7 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
 
     # Convert plot to image and display with st.image
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=600)
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
     buf.seek(0)
     st.image(buf, use_container_width=True)  # Updated parameter
     plt.close()
