@@ -385,51 +385,8 @@ if csv_file and fasta_file:
 
                 # Linear Plots (stacked vertically - up and down) with reduced gap
                 st.subheader("Linear Sequence Visualizations")
-                html_content = """
-                <div style="display: flex; flex-direction: column; gap: 10px;"> <!-- Reduced gap with custom CSS -->
-                """
-                html_content += f"""
-                    <div id="plot-container-{condition1_name}" style="width: 100%; height: auto;">
-                        <img src="data:image/png;base64,{base64.b64encode(io.BytesIO().getvalue()).decode()}" style="width: 100%; height: auto;" onload="this.src='data:image/png;base64,{base64.b64encode(buf1.getvalue()).decode()}'">
-                    </div>
-                    <script>
-                        document.addEventListener("DOMContentLoaded", function() {{
-                            var elem = document.getElementById("plot-container-{condition1_name}");
-                            if (elem.requestFullscreen) {{
-                                elem.requestFullscreen();
-                            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
-                                elem.mozRequestFullScreen();
-                            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
-                                elem.webkitRequestFullscreen();
-                            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
-                                elem.msRequestFullscreen();
-                            }}
-                        }});
-                    </script>
-                """
 
-                html_content += f"""
-                    <div id="plot-container-{condition2_name}" style="width: 100%; height: auto;">
-                        <img src="data:image/png;base64,{base64.b64encode(io.BytesIO().getvalue()).decode()}" style="width: 100%; height: auto;" onload="this.src='data:image/png;base64,{base64.b64encode(buf2.getvalue()).decode()}'">
-                    </div>
-                    <script>
-                        document.addEventListener("DOMContentLoaded", function() {{
-                            var elem = document.getElementById("plot-container-{condition2_name}");
-                            if (elem.requestFullscreen) {{
-                                elem.requestFullscreen();
-                            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
-                                elem.mozRequestFullScreen();
-                            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
-                                elem.webkitRequestFullscreen();
-                            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
-                                elem.msRequestFullscreen();
-                            }}
-                        }});
-                    </script>
-                """
-                html_content += "</div>"
-
-                # Generate and store the plot buffers
+                # Generate plots and buffers first
                 buf1 = io.BytesIO()
                 fig1, ax1 = plt.subplots(figsize=(min(50, max(20, seq_len * 0.15)), 5), dpi=200)
                 cmap = colormaps['autumn']
@@ -466,6 +423,51 @@ if csv_file and fasta_file:
                 plt.savefig(buf2, format='png', bbox_inches='tight', dpi=200)
                 buf2.seek(0)
                 plt.close(fig2)
+
+                # Construct HTML content with pre-generated buffers
+                html_content = """
+                <div style="display: flex; flex-direction: column; gap: 10px;"> <!-- Reduced gap with custom CSS -->
+                """
+                html_content += f"""
+                    <div id="plot-container-{condition1_name}" style="width: 100%; height: auto;">
+                        <img src="data:image/png;base64,{base64.b64encode(buf1.getvalue()).decode()}" style="width: 100%; height: auto;">
+                    </div>
+                    <script>
+                        document.addEventListener("DOMContentLoaded", function() {{
+                            var elem = document.getElementById("plot-container-{condition1_name}");
+                            if (elem.requestFullscreen) {{
+                                elem.requestFullscreen();
+                            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
+                                elem.mozRequestFullScreen();
+                            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+                                elem.webkitRequestFullscreen();
+                            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+                                elem.msRequestFullscreen();
+                            }}
+                        }});
+                    </script>
+                """
+
+                html_content += f"""
+                    <div id="plot-container-{condition2_name}" style="width: 100%; height: auto;">
+                        <img src="data:image/png;base64,{base64.b64encode(buf2.getvalue()).decode()}" style="width: 100%; height: auto;">
+                    </div>
+                    <script>
+                        document.addEventListener("DOMContentLoaded", function() {{
+                            var elem = document.getElementById("plot-container-{condition2_name}");
+                            if (elem.requestFullscreen) {{
+                                elem.requestFullscreen();
+                            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
+                                elem.mozRequestFullScreen();
+                            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+                                elem.webkitRequestFullscreen();
+                            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+                                elem.msRequestFullscreen();
+                            }}
+                        }});
+                    </script>
+                """
+                html_content += "</div>"
 
                 # Render the combined HTML content
                 st.components.v1.html(html_content, height=1000)  # Adjust height to accommodate both plots
