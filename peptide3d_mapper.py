@@ -255,7 +255,7 @@ if csv_file and fasta_file:
                     st.error("No isoforms selected.")
                     st.stop()
                 selected_df = df[df['Protein.Group'].isin(selected_groups)]
-                conditions = {condition1_name: condition1_col, condition2_name: color2_col}
+                conditions = {condition1_name: condition1_col, condition2_name: condition2_col}  # Corrected typo from color2_col to condition2_col
                 peptide_data = {}
                 residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
                 min_max_logs = {}
