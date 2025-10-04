@@ -1,5 +1,3 @@
-Ok can you do one thing add sliders for zoom and rotation of 3D viewer so that the zoom and rotation can be done synchronized way for both the viewer. As I know synchronize zooming is not possible for two viewer. Even seprate sliders will also work. 
-
 import streamlit as st
 import pandas as pd
 import numpy as np
