@@ -292,12 +292,11 @@ if csv_file and fasta_file:
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
                                        min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
-                    # Colorbar with fullscreen
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     st.subheader("Colorbar")
                     overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
                     overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
-                    fig, ax = plt.subplots(figsize=(6, 0.3))
+                    fig, ax = plt.subplots(figsize=(4, 0.2))  # Reduced width to 4 inches, height to 0.2 inches
                     norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
                     sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
                     cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
@@ -308,7 +307,7 @@ if csv_file and fasta_file:
                     buf.seek(0)
                     plt.close(fig)
                     html_content = f"""
-                    <div id="colorbar-container" style="width: 100%; height: auto;">
+                    <div id="colorbar-container" style="width: 100%; height: auto; max-width: 400px;">
                         <img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}" style="width: 100%; height: auto;">
                     </div>
                     <script>
@@ -326,7 +325,7 @@ if csv_file and fasta_file:
                         }});
                     </script>
                     """
-                    st.components.v1.html(html_content, height=100)  # Adjusted height for colorbar
+                    st.components.v1.html(html_content, height=80)  # Reduced height to 80
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("Download Files (ZIP)", use_container_width=True):
