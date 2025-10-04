@@ -87,7 +87,7 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
         view.setStyle({'resi': str(i+1)}, {'cartoon': {'color': c}})
     view.zoomTo()
     st.markdown(f"#### {title}")
-    st.components.v1.html(view._make_html(), height=400)  # Reduced height to minimize vertical space
+    st.components.v1.html(view._make_html(), height=400)
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     fig_width = min(50, max(20, seq_len * 0.15))
@@ -102,11 +102,8 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
-    ax.set_xlabel(f"Amino Acid Position ({title})", fontsize=15)  # Increased font size and added condition name
-    max_ticks = 20
-    step = max(1, seq_len // max_ticks)
-    ax.set_xticks(range(0, seq_len + 1, step))
-    ax.tick_params(axis='x', labelsize=15)  # Increased tick label font size
+    ax.set_xlabel(f"Amino Acid Position ({title})", fontsize=14)
+    ax.tick_params(axis='x', labelsize=12)
     plt.tight_layout()
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
@@ -131,7 +128,7 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
         }});
     </script>
     """
-    st.components.v1.html(html_content, height=300)  # Reduced height to minimize vertical space
+    st.components.v1.html(html_content, height=300)
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
@@ -162,9 +159,8 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
             ax.set_xlim(0, seq_len)
             ax.set_ylim(0, 1)
             ax.set_yticks([])
-            ax.set_xlabel(f'Amino Acid Position ({condition})', fontsize=14)  # Updated for download plots
-            ax.set_xticks(range(0, seq_len + 1, max(1, seq_len // 10)))
-            ax.tick_params(axis='x', labelsize=12)  # Increased tick label font size for download
+            ax.set_xlabel(f'Amino Acid Position ({condition})', fontsize=14)
+            ax.tick_params(axis='x', labelsize=12)
             img_buffer = io.BytesIO()
             plt.savefig(img_buffer, format='jpeg', dpi=600, bbox_inches='tight')
             img_buffer.seek(0)
@@ -282,21 +278,23 @@ if csv_file and fasta_file:
                         st.error(f"PDB fetch failed: {r.status_code}")
                         st.stop()
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
-                # Visualizations in a single container with minimal spacing
                 with st.container():
                     st.subheader("3D Structure Visualizations")
-                    col1, col2 = st.columns(2, gap="small")  # Reduced gap between columns
+                    col1, col2 = st.columns(2, gap="small")
                     with col1:
                         render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
                     with col2:
                         render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
-                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)  # Minimal vertical spacing
+                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     st.subheader("Linear Sequence Visualizations")
                     render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
                                        min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
-                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)  # Consistent minimal spacing
+                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
                                        min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+                    # Colorbar with fullscreen
+                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+                    st.subheader("Colorbar")
                     overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
                     overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
                     fig, ax = plt.subplots(figsize=(6, 0.3))
@@ -305,8 +303,30 @@ if csv_file and fasta_file:
                     cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
                     cbar.set_label('Z-Score Intensity', fontsize=10)
                     cbar.ax.tick_params(labelsize=8)
+                    buf = io.BytesIO()
+                    plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
+                    buf.seek(0)
                     plt.close(fig)
-                    st.pyplot(fig)
+                    html_content = f"""
+                    <div id="colorbar-container" style="width: 100%; height: auto;">
+                        <img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}" style="width: 100%; height: auto;">
+                    </div>
+                    <script>
+                        document.addEventListener("DOMContentLoaded", function() {{
+                            var elem = document.getElementById("colorbar-container");
+                            if (elem.requestFullscreen) {{
+                                elem.requestFullscreen();
+                            }} else if (elem.mozRequestFullScreen) {{
+                                elem.mozRequestFullScreen();
+                            }} else if (elem.webkitRequestFullscreen) {{
+                                elem.webkitRequestFullscreen();
+                            }} else if (elem.msRequestFullscreen) {{
+                                elem.msRequestFullscreen();
+                            }}
+                        }});
+                    </script>
+                    """
+                    st.components.v1.html(html_content, height=100)  # Adjusted height for colorbar
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("Download Files (ZIP)", use_container_width=True):
