@@ -255,7 +255,7 @@ if csv_file and fasta_file:
                     st.error("No isoforms selected.")
                     st.stop()
                 selected_df = df[df['Protein.Group'].isin(selected_groups)]
-                conditions = {condition1_name: condition1_col, condition2_name: condition2_col}  # Corrected typo from color2_col to condition2_col
+                conditions = {condition1_name: condition1_col, condition2_name: condition2_col}
                 peptide_data = {}
                 residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
                 min_max_logs = {}
@@ -291,9 +291,10 @@ if csv_file and fasta_file:
                         render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name, selected_cmap, selected_not_mapped_color)
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     st.subheader("Linear Sequence Visualizations")
+                    st.markdown(f"#### {condition1_name}")
                     render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
                                        min_max_logs[condition1_name][0], min_max_logs[condition1_name][1], selected_cmap, selected_not_mapped_color)
-                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+                    st.markdown(f"#### {condition2_name}")
                     render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
                                        min_max_logs[condition2_name][0], min_max_logs[condition2_name][1], selected_cmap, selected_not_mapped_color)
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
