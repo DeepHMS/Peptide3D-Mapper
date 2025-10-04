@@ -63,22 +63,22 @@ def map_peptides_to_residues(df, protein_seq, intensity_col, overlap_strategy='m
             residue_vals[i] = None
     return residue_vals
 
-def generate_colormap(residue_vals, cmap_name='autumn'):
+def generate_colormap(residue_vals, cmap_name='autumn', not_mapped_color='#d3d3d3'):
     cmap = colormaps[cmap_name]
     vals = [v for v in residue_vals if v is not None]
     vmin, vmax = (min(vals), max(vals)) if vals else (0, 1)
     hex_colors = []
     for val in residue_vals:
         if val is None:
-            hex_colors.append('#d3d3d3')
+            hex_colors.append(not_mapped_color)
         else:
             norm = (val - vmin) / (vmax - vmin) if vmax > vmin else 0.5
             rgb = cmap(norm)[:3]
             hex_colors.append(mcolors.rgb2hex(rgb))
     return hex_colors, vmin, vmax
 
-def render_viewer(pdb_str, residue_vals, bg_color, title):
-    hex_colors, vmin, vmax = generate_colormap(residue_vals)
+def render_viewer(pdb_str, residue_vals, bg_color, title, cmap_name='autumn', not_mapped_color='#d3d3d3'):
+    hex_colors, vmin, vmax = generate_colormap(residue_vals, cmap_name, not_mapped_color)
     view = py3Dmol.view(width="95vw", height="400px")
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
@@ -89,12 +89,12 @@ def render_viewer(pdb_str, residue_vals, bg_color, title):
     st.markdown(f"#### {title}")
     st.components.v1.html(view._make_html(), height=400)
 
-def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
+def render_linear_plot(residue_vals, title, seq_len, vmin, vmax, cmap_name='autumn', not_mapped_color='#d3d3d3'):
     fig_width = min(50, max(20, seq_len * 0.15))
     fig_height = 3
     fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=200)
-    cmap = colormaps['autumn']
-    ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+    cmap = colormaps[cmap_name]
+    ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor=not_mapped_color, edgecolor='none'))
     for i in range(seq_len):
         if residue_vals[i] is not None:
             norm = (residue_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
@@ -130,14 +130,14 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     """
     st.components.v1.html(html_content, height=300)
 
-def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
+def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len, cmap_name='autumn', not_mapped_color='#d3d3d3'):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.writestr(f"{protein_of_interest}_protein.pdb", pdb_str)
         for condition in conditions:
             peptide_csv = peptide_data[condition].to_csv(index=False)
             zipf.writestr(f"{protein_of_interest}_{condition}_peptides.csv", peptide_csv)
-        cmap = colormaps['autumn']
+        cmap = colormaps[cmap_name]
         for condition in conditions:
             pml_content = f"load {protein_of_interest}_protein.pdb\nhide everything\nshow cartoon\ncolor gray90, all\nzoom\n"
             min_log, max_log = min_max_logs[condition]
@@ -150,7 +150,7 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
         for condition in conditions:
             fig_width = min(25, max(10, seq_len / 20))
             fig, ax = plt.subplots(figsize=(fig_width, 1), dpi=600)
-            ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
+            ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor=not_mapped_color, edgecolor='none'))
             min_log, max_log = min_max_logs[condition]
             for i in range(seq_len):
                 if residue_data[condition][i] is not None:
@@ -255,7 +255,7 @@ if csv_file and fasta_file:
                     st.error("No isoforms selected.")
                     st.stop()
                 selected_df = df[df['Protein.Group'].isin(selected_groups)]
-                conditions = {condition1_name: condition1_col, condition2_name: condition2_col}
+                conditions = {condition1_name: condition1_col, condition2_name: color2_col}
                 peptide_data = {}
                 residue_data = {condition1_name: [None] * seq_len, condition2_name: [None] * seq_len}
                 min_max_logs = {}
@@ -278,27 +278,31 @@ if csv_file and fasta_file:
                         st.error(f"PDB fetch failed: {r.status_code}")
                         st.stop()
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
+                # Add colormap and not-mapped color options
+                cmap_options = ['autumn', 'viridis', 'plasma', 'inferno', 'magma', 'cividis']
+                selected_cmap = st.selectbox("Select Color Gradient", cmap_options, index=0)
+                selected_not_mapped_color = st.color_picker("Select Not Mapped Color", "#d3d3d3")
                 with st.container():
                     st.subheader("3D Structure Visualizations")
                     col1, col2 = st.columns(2, gap="small")
                     with col1:
-                        render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
+                        render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name, selected_cmap, selected_not_mapped_color)
                     with col2:
-                        render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
+                        render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name, selected_cmap, selected_not_mapped_color)
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     st.subheader("Linear Sequence Visualizations")
                     render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
-                                       min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
+                                       min_max_logs[condition1_name][0], min_max_logs[condition1_name][1], selected_cmap, selected_not_mapped_color)
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
-                                       min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
+                                       min_max_logs[condition2_name][0], min_max_logs[condition2_name][1], selected_cmap, selected_not_mapped_color)
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     st.subheader("Colorbar")
                     overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
                     overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
-                    fig, ax = plt.subplots(figsize=(4, 0.2))  # Reduced width to 4 inches, height to 0.2 inches
+                    fig, ax = plt.subplots(figsize=(4, 0.2))
                     norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
-                    sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
+                    sm = ScalarMappable(cmap=colormaps[selected_cmap], norm=norm)
                     cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
                     cbar.set_label('Z-Score Intensity', fontsize=10)
                     cbar.ax.tick_params(labelsize=8)
@@ -325,11 +329,11 @@ if csv_file and fasta_file:
                         }});
                     </script>
                     """
-                    st.components.v1.html(html_content, height=80)  # Reduced height to 80
+                    st.components.v1.html(html_content, height=80)
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("Download Files (ZIP)", use_container_width=True):
-                        zip_buffer = create_download_zip(selected_protein, pdb_str, peptide_data, residue_data, conditions.keys(), min_max_logs, seq_len)
+                        zip_buffer = create_download_zip(selected_protein, pdb_str, peptide_data, residue_data, conditions.keys(), min_max_logs, seq_len, selected_cmap, selected_not_mapped_color)
                         st.download_button(
                             label="Download ZIP",
                             data=zip_buffer.getvalue(),
