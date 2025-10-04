@@ -102,11 +102,11 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
     ax.set_xlim(0, seq_len)
     ax.set_ylim(0, 1)
     ax.set_yticks([])
-    ax.set_xlabel(f"Amino Acid Position ({title})", fontsize=14)  # Increased font size and added condition name
+    ax.set_xlabel(f"Amino Acid Position ({title})", fontsize=15)  # Increased font size and added condition name
     max_ticks = 20
     step = max(1, seq_len // max_ticks)
     ax.set_xticks(range(0, seq_len + 1, step))
-    ax.tick_params(axis='x', labelsize=12)  # Increased tick label font size
+    ax.tick_params(axis='x', labelsize=15)  # Increased tick label font size
     plt.tight_layout()
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
