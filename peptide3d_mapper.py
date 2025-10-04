@@ -1,3 +1,5 @@
+Ok can you do one thing add sliders for zoom and rotation of 3D viewer so that the zoom and rotation can be done synchronized way for both the viewer. As I know synchronize zooming is not possible for two viewer. Even seprate sliders will also work. 
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -78,27 +80,25 @@ def generate_colormap(residue_vals, cmap_name='autumn'):
             hex_colors.append(mcolors.rgb2hex(rgb))
     return hex_colors, vmin, vmax
 
-def render_viewer(pdb_str, residue_vals, bg_color, title, zoom, rotation):
+def render_viewer(pdb_str, residue_vals, bg_color, title):
     hex_colors, vmin, vmax = generate_colormap(residue_vals)
-    view = py3Dmol.view(width="95vw", height="400px")
+    # Responsive 3D sizing: Use percentage width relative to viewport (45% of container/column)
+    view = py3Dmol.view(width="95vw", height="400px")  # vw = viewport width, auto-scales with screen/column
     view.addModel(pdb_str, 'pdb')
     view.setBackgroundColor(bg_color)
     view.setStyle({}, {'cartoon': {'color': 'lightgray'}})
-
     for i, c in enumerate(hex_colors):
         view.setStyle({'resi': str(i+1)}, {'cartoon': {'color': c}})
-
-    # Apply zoom & rotation
     view.zoomTo()
-    view.setZoom(zoom)
-    view.rotate(rotation, 'y')
 
     st.markdown(f"#### {title}")
     st.components.v1.html(view._make_html(), height=800)
+    # No individual colorbar here - shared one later
 
 def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
-    fig_width = min(50, max(20, seq_len * 0.15))
-    fig_height = 3
+    # Cap the width to a reasonable maximum to control scaling
+    fig_width = min(50, max(20, seq_len * 0.15))  # Max width capped at 50 inches
+    fig_height = 3  # Fixed height for consistency
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=200)
     cmap = colormaps['autumn']
@@ -123,27 +123,46 @@ def render_linear_plot(residue_vals, title, seq_len, vmin, vmax):
 
     plt.tight_layout()
 
+    # Convert plot to image
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=200)
     buf.seek(0)
     plt.close()
 
+    # Inject HTML with JavaScript to trigger full-screen mode
     html_content = f"""
     <div id="plot-container-{title}" style="width: 100%; height: auto;">
         <img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}" style="width: 100%; height: auto;">
     </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {{
+            var elem = document.getElementById("plot-container-{title}");
+            if (elem.requestFullscreen) {{
+                elem.requestFullscreen();
+            }} else if (elem.mozRequestFullScreen) {{ /* Firefox */
+                elem.mozRequestFullScreen();
+            }} else if (elem.webkitRequestFullscreen) {{ /* Chrome, Safari, Opera */
+                elem.webkitRequestFullscreen();
+            }} else if (elem.msRequestFullscreen) {{ /* IE/Edge */
+                elem.msRequestFullscreen();
+            }}
+        }});
+    </script>
     """
-    st.components.v1.html(html_content, height=500)
+    st.components.v1.html(html_content, height=500)  # Adjust height as needed
 
 def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data, conditions, min_max_logs, seq_len):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # PDB
         zipf.writestr(f"{protein_of_interest}_protein.pdb", pdb_str)
 
+        # Peptide CSVs
         for condition in conditions:
             peptide_csv = peptide_data[condition].to_csv(index=False)
             zipf.writestr(f"{protein_of_interest}_{condition}_peptides.csv", peptide_csv)
 
+        # PyMOL scripts
         cmap = colormaps['autumn']
         for condition in conditions:
             pml_content = f"load {protein_of_interest}_protein.pdb\nhide everything\nshow cartoon\ncolor gray90, all\nzoom\n"
@@ -155,8 +174,9 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
                     pml_content += f"color {color_hex}, resi {i+1}\n"
             zipf.writestr(f"{protein_of_interest}_{condition}_pymol_script.pml", pml_content)
 
+        # Linear JPEGs
         for condition in conditions:
-            fig_width = min(25, max(10, seq_len / 20))
+            fig_width = min(25, max(10, seq_len / 20))  # Dynamic for download too
             fig, ax = plt.subplots(figsize=(fig_width, 1), dpi=600)
             ax.add_patch(patches.Rectangle((0, 0), seq_len, 1, facecolor='lightgray', edgecolor='none'))
             min_log, max_log = min_max_logs[condition]
@@ -178,7 +198,6 @@ def create_download_zip(protein_of_interest, pdb_str, peptide_data, residue_data
     zip_buffer.seek(0)
     return zip_buffer
 
-
 # ------------------------
 # Streamlit App
 # ------------------------
@@ -195,13 +214,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Initialize session state for steps
 if 'conditions_confirmed' not in st.session_state:
     st.session_state.conditions_confirmed = False
 if 'processed' not in st.session_state:
     st.session_state.processed = False
 
-csv_file = st.file_uploader("Upload Peptide CSV", type=["csv"])
-fasta_file = st.file_uploader("Upload FASTA", type=["fasta"])
+csv_file = st.file_uploader("Upload Peptide CSV", type=["csv"], help="CSV with Protein.Group, Stripped.Sequence, and intensity columns")
+fasta_file = st.file_uploader("Upload FASTA", type=["fasta"], help="FASTA with matching UniProt IDs")
 
 if csv_file and fasta_file:
     try:
@@ -222,7 +242,8 @@ if csv_file and fasta_file:
         st.error(f"Expected exactly 2 intensity columns, found: {intensity_cols}")
         st.stop()
 
-    col1, col2 = st.columns([1, 1])
+    # Step 1: Conditions (wide columns for balance)
+    col1, col2 = st.columns([1, 1])  # Even split for wide layout
     with col1:
         condition1_name = st.text_input("Name for Condition 1", value="Condition 1")
         condition1_col = st.selectbox("Map Condition 1 to Column", intensity_cols, index=0)
@@ -234,11 +255,13 @@ if csv_file and fasta_file:
         st.error("Intensity columns must be different.")
         st.stop()
 
+    # Confirm Conditions Button (full width)
     if st.button("Confirm Conditions", use_container_width=True):
         st.session_state.conditions_confirmed = True
-        st.session_state.processed = False
-        st.rerun()
+        st.session_state.processed = False  # Reset processing
+        st.rerun()  # Refresh to show Step 2
 
+    # Step 2: Protein/Options (in a container for better spacing)
     if st.session_state.conditions_confirmed:
         with st.container():
             st.info("✅ Conditions confirmed. Now select protein and options.")
@@ -252,14 +275,17 @@ if csv_file and fasta_file:
             with col4:
                 overlap_strategy = st.selectbox("Overlap Strategy", ["none", "merge", "highest", "last"])
 
+            # Process Protein Button (full width)
             if st.button("Process Protein", use_container_width=True):
                 st.session_state.processed = True
-                st.rerun()
+                st.rerun()  # Refresh to trigger Step 3 (processing/rendering)
 
+        # Step 3: Processing & Rendering (triggered by processed=True)
         if st.session_state.processed:
             with st.container():
-                st.info("🔄 Processing...")
-
+                st.info("🔄 Processing... (This may take a moment for PDB fetch.)")
+                
+                # Find sequence
                 base_id = selected_protein.split('-')[0]
                 protein_seq = None
                 for rec in seq_records:
@@ -268,11 +294,12 @@ if csv_file and fasta_file:
                         protein_seq = str(rec.seq)
                         break
                 if protein_seq is None:
-                    st.error("Protein sequence not found in FASTA.")
+                    st.error("Protein sequence not found in FASTA. Ensure IDs match (e.g., UniProt prefix).")
                     st.stop()
 
                 seq_len = len(protein_seq)
 
+                # Find isoforms
                 isoforms = df[df['Protein.Group'].str.contains(selected_protein + r'(?:-\d+)?$', regex=True)]['Protein.Group'].unique()
                 if len(isoforms) > 1 and combine_isoforms == "no":
                     selected_groups = st.multiselect("Select Isoforms", options=list(isoforms), default=list(isoforms))
@@ -301,6 +328,7 @@ if csv_file and fasta_file:
                     peptides = selected_df.groupby('Stripped.Sequence')[intensity_col].mean().reset_index()
                     peptide_data[condition] = peptides
 
+                # Fetch PDB
                 pdb_url = f"https://alphafold.ebi.ac.uk/files/AF-{base_id}-F1-model_v4.pdb"
                 with st.spinner("Fetching AlphaFold structure..."):
                     r = requests.get(pdb_url, timeout=10)
@@ -312,26 +340,25 @@ if csv_file and fasta_file:
 
                 bg_color = st.selectbox("Background Color", ["white", "black", "darkgrey"], index=1)
 
-                # Shared sliders
-                zoom_val = st.slider("Zoom Level", min_value=50, max_value=500, value=150, step=10)
-                rot_val = st.slider("Rotation (Y-axis)", min_value=0, max_value=360, value=0, step=10)
-
+                # 3D Views (side-by-side, wider viewers)
                 st.subheader("3D Structure Visualizations")
                 col1, col2 = st.columns(2)
                 with col1:
-                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name, zoom_val, rot_val)
+                    render_viewer(pdb_str, residue_data[condition1_name], bg_color, condition1_name)
                 with col2:
-                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name, zoom_val, rot_val)
+                    render_viewer(pdb_str, residue_data[condition2_name], bg_color, condition2_name)
 
+                # Linear Plots (stacked vertically - up and down)
                 st.subheader("Linear Sequence Visualizations")
                 render_linear_plot(residue_data[condition1_name], condition1_name, seq_len,
                                    min_max_logs[condition1_name][0], min_max_logs[condition1_name][1])
                 render_linear_plot(residue_data[condition2_name], condition2_name, seq_len,
                                    min_max_logs[condition2_name][0], min_max_logs[condition2_name][1])
 
+                # One small shared colorbar (combined range, smaller size)
                 overall_vmin = min(min_max_logs[condition1_name][0], min_max_logs[condition2_name][0])
                 overall_vmax = max(min_max_logs[condition1_name][1], min_max_logs[condition2_name][1])
-                fig, ax = plt.subplots(figsize=(6, 0.3))
+                fig, ax = plt.subplots(figsize=(6, 0.3))  # Smaller height for compact legend
                 norm = Normalize(vmin=overall_vmin, vmax=overall_vmax)
                 sm = ScalarMappable(cmap=colormaps['autumn'], norm=norm)
                 cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
@@ -340,6 +367,7 @@ if csv_file and fasta_file:
                 plt.close(fig)
                 st.pyplot(fig)
 
+                # Download (full width button)
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("Download Files (ZIP)", use_container_width=True):
